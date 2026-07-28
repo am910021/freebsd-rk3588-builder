@@ -37,21 +37,26 @@ case $# in
 	*) usage ;;
 esac
 
-UBOOT_BIN=${UBOOT_DIR}/nanopc-t6-lts-uboot-16m.bin
+UBOOT_BIN=${UBOOT_DIR}/nanopc-t6-lts-uboot-${FIRMWARE_MIB}m.bin
 IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb
-LOGO_RAW=${UBOOT_DIR}/logo.img
 DUALBOOT_CMD=${UBOOT_DIR}/dualboot.cmd
 DUALBOOT_SCR=${UBOOT_DIR}/dualboot.scr
 ROOT_LABEL=nanopc_t6_root
 
-ESP_START=32768
-ESP_SECTORS=524288
-SWAP_START=557056
-SWAP_SECTORS=2097152
-ROOT_START=2654208
-ROOT_SECTORS=4194304
-TOTAL_SECTORS=7045120
+SECTORS_PER_MIB=2048
+ESP_END_MIB=$((FIRMWARE_MIB + ESP_SIZE_MIB))
+SWAP_END_MIB=$((ESP_END_MIB + SWAP_SIZE_MIB))
+ROOT_END_MIB=$((SWAP_END_MIB + ROOT_SIZE_MIB))
+IMAGE_SIZE_MIB=$((ROOT_END_MIB + IMAGE_TAIL_MIB))
+
+ESP_START=$((FIRMWARE_MIB * SECTORS_PER_MIB))
+ESP_SECTORS=$((ESP_SIZE_MIB * SECTORS_PER_MIB))
+SWAP_START=$((ESP_END_MIB * SECTORS_PER_MIB))
+SWAP_SECTORS=$((SWAP_SIZE_MIB * SECTORS_PER_MIB))
+ROOT_START=$((SWAP_END_MIB * SECTORS_PER_MIB))
+ROOT_SECTORS=$((ROOT_SIZE_MIB * SECTORS_PER_MIB))
+TOTAL_SECTORS=$((IMAGE_SIZE_MIB * SECTORS_PER_MIB))
 
 md=
 root_mnt=
@@ -63,6 +68,11 @@ die()
 	echo "${0##*/}: $*" >&2
 	exit 1
 }
+
+case "${FIRMWARE_MIB}" in
+	16|32) ;;
+	*) die "firmware size must be 16 or 32 MiB" ;;
+esac
 
 if [ -z "${RGE_TXZ}" ]; then
 	for candidate in "${TXZ_ROOT}"/if_rge*.txz; do
@@ -92,8 +102,8 @@ cleanup()
 }
 
 for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${RGE_TXZ}" "${UBOOT_BIN}" \
-    "${IDBLOADER}" "${UBOOT_ITB}" "${LOGO_RAW}" "${DUALBOOT_CMD}" \
-    "${DUALBOOT_SCR}" "${DTB}" "${LOGO_BMP}"; do
+    "${IDBLOADER}" "${UBOOT_ITB}" "${DUALBOOT_CMD}" "${DUALBOOT_SCR}" \
+    "${DTB}" "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
 [ ! -e "${OUT}" ] || die "output already exists: ${OUT}"
@@ -119,7 +129,7 @@ mkdir -p "${root_mnt}" "${esp_mnt}"
 
 echo "== Creating GPT image =="
 truncate -s $((TOTAL_SECTORS * 512)) "${OUT}"
-echo "== Installing complete 16 MiB U-Boot R26 firmware =="
+echo "== Installing complete ${FIRMWARE_MIB} MiB U-Boot R26 firmware =="
 dd if="${UBOOT_BIN}" of="${OUT}" bs=1m conv=notrunc,sync status=none
 md=$(mdconfig -a -t vnode -f "${OUT}")
 gpart create -s gpt "${md}"
@@ -255,23 +265,18 @@ fsck_msdosfs -n "/dev/${md}p1"
 fsck_ufs -n "/dev/${md}p3"
 mkimage -l "${DUALBOOT_SCR}" >/dev/null
 
-python3 - "${OUT}" "${IDBLOADER}" "${UBOOT_ITB}" "${LOGO_RAW}" <<'PY'
+python3 - "${OUT}" "${UBOOT_BIN}" <<'PY'
 from pathlib import Path
 import sys
 
-image, idb, itb, logo = map(Path, sys.argv[1:])
-checks = (
-    (0x40 * 512, idb),
-    (0x4000 * 512, itb),
-    (0x6000 * 512, logo),
-)
+image, firmware = map(Path, sys.argv[1:])
+offset = 0x40 * 512
+expected = firmware.read_bytes()[offset:]
 with image.open("rb") as stream:
-    for offset, source in checks:
-        expected = source.read_bytes()
-        stream.seek(offset)
-        actual = stream.read(len(expected))
-        if actual != expected:
-            raise SystemExit(f"raw boot verification failed at offset {offset}")
+    stream.seek(offset)
+    actual = stream.read(len(expected))
+if actual != expected:
+    raise SystemExit(f"raw firmware verification failed at offset {offset}")
 PY
 
 image_sha=$(sha256 -q "${OUT}")
@@ -291,10 +296,11 @@ U-Boot FDT overlays: ${UBOOT_FDT_OVERLAYS}
 if_rge.txz: ${RGE_TXZ}
 if_rge.txz SHA256: ${rge_sha}
 Layout:
-  raw firmware:  0-16 MiB
-  p1 ESP:        16-272 MiB
-  p2 swap:       272-1296 MiB
-  p3 UFS root:   1296-3344 MiB
+  raw firmware:  0-${FIRMWARE_MIB} MiB
+  p1 ESP:        ${FIRMWARE_MIB}-${ESP_END_MIB} MiB
+  p2 swap:       ${ESP_END_MIB}-${SWAP_END_MIB} MiB
+  p3 UFS root:   ${SWAP_END_MIB}-${ROOT_END_MIB} MiB
+  free tail:     ${ROOT_END_MIB}-${IMAGE_SIZE_MIB} MiB
 EOF
 
 mdconfig -d -u "${md#md}"
