@@ -2,15 +2,16 @@
 set -eu
 
 BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
-TXZ_ROOT=${TXZ_ROOT:-${BUILDER_ROOT}/txz}
-OUTPUT_ROOT=${OUTPUT_ROOT:-${BUILDER_ROOT}/output}
+BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
+[ -r "${BUILDER_CONFIG}" ] || {
+	echo "${0##*/}: missing config: ${BUILDER_CONFIG}" >&2
+	exit 1
+}
+. "${BUILDER_CONFIG}"
+
 STAMP=${STAMP:-$(date +%Y%m%d-%H%M%S)}
-BASE_TXZ=${BASE_TXZ:-${TXZ_ROOT}/base.txz}
-KERNEL_TXZ=${KERNEL_TXZ:-${TXZ_ROOT}/kernel.txz}
-RGE_TXZ=${RGE_TXZ:-}
-UBOOT_DIR=${UBOOT_DIR:-${OUTPUT_ROOT}/uboot-latest}
-DTB=${DTB:-${BUILDER_ROOT}/dtb/rk3588-nanopc-t6.dtb}
-LOGO_BMP=${LOGO_BMP:-${UBOOT_DIR}/logo.bmp}
+DTB=${DTB:-${IMAGE_DTB}}
+LOGO_BMP=${LOGO_BMP:-${IMAGE_LOGO_BMP}}
 OUT=${OUT:-${OUTPUT_ROOT}/nanopc-t6-lts-freebsd14.3-r26-${STAMP}.img}
 WORK=${WORK:-}
 

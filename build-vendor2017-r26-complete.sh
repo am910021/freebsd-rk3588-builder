@@ -2,9 +2,12 @@
 set -eu
 
 BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
-SRC_ROOT=${SRC_ROOT:-${BUILDER_ROOT}/src}
-OUTPUT_ROOT=${OUTPUT_ROOT:-${BUILDER_ROOT}/output}
-FIRMWARE_MIB=${FIRMWARE_MIB:-16}
+BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
+[ -r "${BUILDER_CONFIG}" ] || {
+	echo "${0##*/}: missing config: ${BUILDER_CONFIG}" >&2
+	exit 1
+}
+. "${BUILDER_CONFIG}"
 
 case $# in
 	0) ;;
@@ -24,15 +27,7 @@ esac
 
 FINAL_OUT=${OUTPUT_ROOT}/uboot-r26-${FIRMWARE_MIB}m
 WORK=${WORK:-}
-VENDOR_SRC=${VENDOR_SRC:-${SRC_ROOT}/u-boot-2017}
-LOGO_BMP=${LOGO_BMP:-${VENDOR_SRC}/assets/logo.bmp}
-RKBIN_DIR=${RKBIN_DIR:-${SRC_ROOT}/rkbin}
-IDBLOADER_SRC=${IDBLOADER_SRC:-${SRC_ROOT}/prebuilt/idbloader.img}
-KERNEL_DTB=${KERNEL_DTB:-${BUILDER_ROOT}/dtb/rk3588-nanopi6-rev07.dtb}
-MENU_CMD=${MENU_CMD:-${BUILDER_ROOT}/menu/freebsd14-r26-bootmenu3s.cmd}
-MKIMAGE=${MKIMAGE:-/usr/local/bin/mkimage}
-CROSS_COMPILE=${CROSS_COMPILE:-aarch64-none-elf-}
-JOBS=${JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || echo 4)}
+LOGO_BMP=${LOGO_BMP:-${UBOOT_LOGO_BMP}}
 
 fail()
 {

@@ -3,13 +3,15 @@
 set -eu
 
 BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
-RGE_DIR=${RGE_DIR:-${BUILDER_ROOT}/src/if_rge_freebsd}
-FREEBSD_SRC=${FREEBSD_SRC:-${BUILDER_ROOT}/src/freebsd-src}
-FREEBSD_OBJ=${FREEBSD_OBJ:-/usr/obj/usr/src/arm64.aarch64}
-KERNBUILDDIR=${KERNBUILDDIR:-${FREEBSD_OBJ}/sys/RK3588-T6-NORE}
-OUTPUT_DIR=${OUTPUT_DIR:-${BUILDER_ROOT}/output/if_rge_freebsd}
-OBJ_ROOT=${OBJ_ROOT:-${OUTPUT_DIR}/obj}
-TOOLBIN=${FREEBSD_OBJ}/tmp/usr/bin
+BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
+[ -r "${BUILDER_CONFIG}" ] || {
+	echo "${0##*/}: missing config: ${BUILDER_CONFIG}" >&2
+	exit 1
+}
+. "${BUILDER_CONFIG}"
+
+OUTPUT_DIR=${OUTPUT_DIR:-${RGE_OUTPUT_DIR}}
+OBJ_ROOT=${OBJ_ROOT:-${RGE_OBJ_ROOT}}
 
 die()
 {
@@ -58,6 +60,7 @@ readelf -h "${module}" | grep -q 'Machine:.*AArch64' ||
 cp -p "${module}" "${OUTPUT_DIR}/if_rge.ko"
 cp -p "${module}" "${work}/boot/modules/if_rge.ko"
 tar -cJf "${package}" -C "${work}" boot/modules/if_rge.ko
+ln -sfn "${package##*/}" "${OUTPUT_DIR}/if_rge.txz"
 
 sha256 "${OUTPUT_DIR}/if_rge.ko" "${package}" > "${package}.sha256"
 
