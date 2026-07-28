@@ -35,8 +35,7 @@ fail()
 	exit 1
 }
 
-for file in "${IDBLOADER_SRC}" "${KERNEL_DTB}" "${MENU_CMD}" \
-    "${LOGO_BMP}"; do
+for file in "${KERNEL_DTB}" "${MENU_CMD}" "${LOGO_BMP}"; do
 	[ -f "${file}" ] || fail "missing input: ${file}"
 done
 [ -d "${UBOOT_SRC_DIR}" ] || fail "missing source: ${UBOOT_SRC_DIR}"
@@ -114,15 +113,17 @@ ln -s /usr/local/bin/gsed "${BUILD_SRC}/build-tools/sed"
 	    gmake CROSS_COMPILE="${CROSS_COMPILE}" -j"${JOBS}"
 	PATH="${BUILD_SRC}/build-tools:${PATH}" \
 	    ./make.sh "CROSS_COMPILE=${CROSS_COMPILE}" itb
+	PATH="${BUILD_SRC}/build-tools:${PATH}" \
+	    ./make.sh "CROSS_COMPILE=${CROSS_COMPILE}" --idblock
 )
 
 for file in u-boot.itb u-boot.bin .config include/configs/nanopi6.h \
-    dts/kern.dtb; do
+    dts/kern.dtb idblock.bin; do
 	[ -f "${BUILD_SRC}/${file}" ] ||
 	    fail "build did not produce: ${file}"
 done
 
-cp -p "${IDBLOADER_SRC}" "${OUT}/idbloader.img"
+cp -p "${BUILD_SRC}/idblock.bin" "${OUT}/idbloader.img"
 cp -p "${BUILD_SRC}/u-boot.itb" "${OUT}/u-boot.itb"
 cp -p "${BUILD_SRC}/u-boot.bin" "${OUT}/u-boot.bin"
 cp -p "${BUILD_SRC}/.config" "${OUT}/u-boot.config"
@@ -138,7 +139,7 @@ Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 Builder root: ${BUILDER_ROOT}
 Vendor source: ${UBOOT_SRC_DIR}
 rkbin: ${RKBIN_SRC_DIR}
-idbloader: ${IDBLOADER_SRC}
+idbloader: generated from rkbin by ./make.sh --idblock
 Embedded kernel DTB: ${KERNEL_DTB}
 Cross compile: ${CROSS_COMPILE}
 Jobs: ${JOBS}
