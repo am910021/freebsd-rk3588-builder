@@ -4,7 +4,6 @@ set -eu
 BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
 SRC_ROOT=${SRC_ROOT:-${BUILDER_ROOT}/src}
 OUTPUT_ROOT=${OUTPUT_ROOT:-${BUILDER_ROOT}/output}
-STAMP=${STAMP:-$(date +%Y%m%d-%H%M%S)}
 FIRMWARE_MIB=${FIRMWARE_MIB:-16}
 
 case $# in
@@ -23,7 +22,7 @@ case "${FIRMWARE_MIB}" in
 		;;
 esac
 
-OUT=${OUT:-${OUTPUT_ROOT}/uboot-r26-${FIRMWARE_MIB}m-${STAMP}}
+FINAL_OUT=${OUTPUT_ROOT}/uboot-r26-${FIRMWARE_MIB}m
 WORK=${WORK:-}
 VENDOR_SRC=${VENDOR_SRC:-${SRC_ROOT}/u-boot-2017}
 LOGO_BMP=${LOGO_BMP:-${VENDOR_SRC}/assets/logo.bmp}
@@ -48,7 +47,6 @@ done
 [ -d "${VENDOR_SRC}" ] || fail "missing source: ${VENDOR_SRC}"
 [ -d "${RKBIN_DIR}" ] || fail "missing rkbin: ${RKBIN_DIR}"
 [ -x "${MKIMAGE}" ] || fail "not executable: ${MKIMAGE}"
-[ ! -e "${OUT}" ] || fail "output already exists: ${OUT}"
 for cmd in git rsync gmake gsed mktemp python3 sha256 \
     "${CROSS_COMPILE}gcc"; do
 	command -v "${cmd}" >/dev/null 2>&1 || fail "missing command: ${cmd}"
@@ -62,6 +60,7 @@ SOURCE_COMMIT=$(git -C "${VENDOR_SRC}" rev-parse HEAD)
     fail "source tree is not clean: ${VENDOR_SRC}"
 
 AUTO_WORK=0
+STAGING_OUT=
 if [ -z "${WORK}" ]; then
 	WORK=$(mktemp -d "${TMPDIR:-/tmp}/nanopc-t6-uboot.XXXXXX")
 	AUTO_WORK=1
@@ -71,13 +70,19 @@ else
 fi
 cleanup()
 {
+	if [ -n "${STAGING_OUT}" ]; then
+		rm -rf "${STAGING_OUT}"
+	fi
 	if [ "${AUTO_WORK}" = "1" ]; then
 		rm -rf "${WORK}"
 	fi
 }
 trap cleanup EXIT INT TERM
 
-mkdir -p "${OUT}"
+mkdir -p "${OUTPUT_ROOT}"
+STAGING_OUT=$(mktemp -d \
+    "${OUTPUT_ROOT}/.uboot-r26-${FIRMWARE_MIB}m.XXXXXX")
+OUT=${STAGING_OUT}
 BUILD_SRC="${WORK}/u-boot"
 rsync -aH --delete \
     --exclude '.git' \
@@ -143,7 +148,7 @@ Embedded kernel DTB: ${KERNEL_DTB}
 Cross compile: ${CROSS_COMPILE}
 Jobs: ${JOBS}
 Work dir: ${WORK}
-Output dir: ${OUT}
+Output dir: ${FINAL_OUT}
 EOF
 
 cp -p "${LOGO_BMP}" "${OUT}/logo.bmp"
@@ -256,6 +261,11 @@ EOF
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt \
 	    > SHA256SUMS
 )
+
+rm -rf "${FINAL_OUT}"
+mv "${OUT}" "${FINAL_OUT}"
+STAGING_OUT=
+OUT=${FINAL_OUT}
 
 ln -sfn "${OUT}" "${OUTPUT_ROOT}/uboot-latest"
 echo "== R26 complete bundle =="
