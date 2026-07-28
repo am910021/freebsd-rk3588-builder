@@ -35,7 +35,7 @@ fail()
 	exit 1
 }
 
-for file in "${KERNEL_DTB}" "${MENU_CMD}" "${LOGO_BMP}"; do
+for file in "${UBOOT_RUNTIME_DTB}" "${MENU_CMD}" "${LOGO_BMP}"; do
 	[ -f "${file}" ] || fail "missing input: ${file}"
 done
 [ -d "${UBOOT_SRC_DIR}" ] || fail "missing source: ${UBOOT_SRC_DIR}"
@@ -104,7 +104,7 @@ ln -s /usr/local/bin/gsed "${BUILD_SRC}/build-tools/sed"
 	cd "${BUILD_SRC}"
 	PATH="${BUILD_SRC}/build-tools:${PATH}" \
 	    gmake CROSS_COMPILE="${CROSS_COMPILE}" nanopi6_defconfig
-	cp -p "${KERNEL_DTB}" dts/kern.dtb
+	cp -p "${UBOOT_RUNTIME_DTB}" dts/kern.dtb
 	grep -q '^CONFIG_EMBED_KERNEL_DTB=y$' .config ||
 	    echo 'CONFIG_EMBED_KERNEL_DTB=y' >> .config
 	PATH="${BUILD_SRC}/build-tools:${PATH}" \
@@ -129,7 +129,7 @@ cp -p "${BUILD_SRC}/u-boot.bin" "${OUT}/u-boot.bin"
 cp -p "${BUILD_SRC}/.config" "${OUT}/u-boot.config"
 cp -p "${BUILD_SRC}/include/configs/nanopi6.h" "${OUT}/nanopi6.h"
 cp -p "${BUILD_SRC}/dts/kern.dtb" \
-    "${OUT}/rk3588-nanopi6-rev07.dtb"
+    "${OUT}/uboot-runtime.dtb"
 if [ -f "${BUILD_SRC}/u-boot.its" ]; then
 	cp -p "${BUILD_SRC}/u-boot.its" "${OUT}/u-boot.its"
 fi
@@ -140,7 +140,7 @@ Builder root: ${BUILDER_ROOT}
 Vendor source: ${UBOOT_SRC_DIR}
 rkbin: ${RKBIN_SRC_DIR}
 idbloader: generated from rkbin by ./make.sh --idblock
-Embedded kernel DTB: ${KERNEL_DTB}
+U-Boot runtime DTB: ${UBOOT_RUNTIME_DTB}
 Cross compile: ${CROSS_COMPILE}
 Jobs: ${JOBS}
 Work dir: ${WORK}
@@ -258,7 +258,7 @@ EOF
 (
 	cd "${OUT}"
 	sha256 idbloader.img u-boot.itb u-boot.bin u-boot.config nanopi6.h \
-	    rk3588-nanopi6-rev07.dtb logo.bmp dualboot.cmd dualboot.scr \
+	    uboot-runtime.dtb logo.bmp dualboot.cmd dualboot.scr \
 	    logo.img nanopc-t6-lts-uboot-${FIRMWARE_MIB}m.bin \
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt \
 	    > SHA256SUMS

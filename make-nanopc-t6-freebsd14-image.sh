@@ -10,7 +10,6 @@ BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
 . "${BUILDER_CONFIG}"
 
 STAMP=${STAMP:-$(date +%Y%m%d-%H%M%S)}
-DTB=${DTB:-${IMAGE_DTB}}
 LOGO_BMP=${LOGO_BMP:-${IMAGE_LOGO_BMP}}
 OUT=${OUT:-${OUTPUT_ROOT}/nanopc-t6-lts-freebsd14.3-r26-${STAMP}.img}
 WORK=${WORK:-}
@@ -103,7 +102,7 @@ cleanup()
 
 for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${RGE_TXZ}" "${UBOOT_BIN}" \
     "${IDBLOADER}" "${UBOOT_ITB}" "${DUALBOOT_CMD}" "${DUALBOOT_SCR}" \
-    "${DTB}" "${LOGO_BMP}"; do
+    "${FREEBSD_DTB}" "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
 [ ! -e "${OUT}" ] || die "output already exists: ${OUT}"
@@ -198,7 +197,7 @@ rge_sha=$(sha256 -q "${RGE_TXZ}")
 firmware_sha=$(sha256 -q "${UBOOT_BIN}")
 idb_sha=$(sha256 -q "${IDBLOADER}")
 uboot_sha=$(sha256 -q "${UBOOT_ITB}")
-dtb_sha=$(sha256 -q "${DTB}")
+dtb_sha=$(sha256 -q "${FREEBSD_DTB}")
 logo_sha=$(sha256 -q "${LOGO_BMP}")
 src_commit=$(git -C /usr/src rev-parse --short HEAD 2>/dev/null || echo unknown)
 
@@ -210,7 +209,7 @@ if_rge.txz: ${rge_sha}
 firmware.bin: ${firmware_sha}
 idbloader.img: ${idb_sha}
 u-boot.itb: ${uboot_sha}
-rk3588-nanopc-t6.dtb: ${dtb_sha}
+FreeBSD DTB: ${dtb_sha}
 logo.bmp: ${logo_sha}
 EOF
 
@@ -249,7 +248,7 @@ printf 'fdt_overlays=%s\n' "${UBOOT_FDT_OVERLAYS}" \
     > "${esp_mnt}/EFI/overlays.conf"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/BOOT/BOOTAA64.EFI"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/FreeBSD/loader.efi"
-cp -p "${DTB}" "${esp_mnt}/dtb/rk3588-nanopc-t6.dtb"
+cp -p "${FREEBSD_DTB}" "${esp_mnt}/dtb/rk3588-nanopc-t6.dtb"
 
 cp -p "${DUALBOOT_CMD}" "${esp_mnt}/dualboot.cmd"
 cp -p "${DUALBOOT_SCR}" "${esp_mnt}/dualboot.scr"
@@ -291,7 +290,7 @@ Root label: ${ROOT_LABEL}
 U-Boot: ${UBOOT_DIR}
 U-Boot firmware: ${UBOOT_BIN}
 U-Boot firmware SHA256: ${firmware_sha}
-DTB: ${DTB}
+FreeBSD DTB: ${FREEBSD_DTB}
 U-Boot FDT overlays: ${UBOOT_FDT_OVERLAYS}
 if_rge.txz: ${RGE_TXZ}
 if_rge.txz SHA256: ${rge_sha}

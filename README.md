@@ -53,6 +53,13 @@ IMAGE_TAIL_MIB=96
 JOBS=16
 ```
 
+每個 board 分別指定 U-Boot 階段與 FreeBSD 階段使用的 DTB：
+
+```sh
+UBOOT_RUNTIME_DTB=${BOARD_DIR}/dtb/rk3588-nanopi6-rev07.dtb
+FREEBSD_DTB=${BOARD_DIR}/dtb/rk3588-nanopc-t6.dtb
+```
+
 Git 來源可以使用 branch，或用 commit 固定版本：
 
 ```sh
@@ -118,6 +125,7 @@ KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 output/uboot-r26-16m/
 ├── idbloader.img
 ├── u-boot.itb
+├── uboot-runtime.dtb
 ├── logo.bmp
 ├── logo.img
 ├── dualboot.cmd
@@ -129,6 +137,14 @@ output/uboot-r26-16m/
 ```
 
 `output/uboot-latest` 會指向最新完成的 bundle。
+
+### Device trees
+
+`UBOOT_RUNTIME_DTB` 會以 `dts/kern.dtb` 嵌入 `u-boot.itb` 的
+`kern-fdt`，供 vendor U-Boot runtime 初始化硬體。
+
+`FREEBSD_DTB` 會複製到 ESP；U-Boot menu 載入它、套用 DTBO，再透過
+`bootefi` 交給 FreeBSD `loader.efi`。
 
 ### idbloader
 
@@ -223,7 +239,7 @@ FIRMWARE_MIB=32 ./make-nanopc-t6-freebsd14-image.sh
 Image 內會安裝：
 
 - `/EFI/FreeBSD/loader.efi`
-- NanoPC-T6 DTB
+- `FREEBSD_DTB`
 - `/EFI/overlays.conf` 與 board 指定的 DTBO
 - R26 U-Boot menu
 - `if_rge.ko`
@@ -247,7 +263,7 @@ dd if=output/<image>.img of=/dev/daX bs=1m conv=sync status=progress
 sync
 ```
 
-每次變更 U-Boot、rkbin、DTB 或 FreeBSD kernel 後，至少確認：
+每次變更 U-Boot、rkbin、任一 DTB 或 FreeBSD kernel 後，至少確認：
 
 1. UART 顯示 DDR、SPL 與 R26 版本 marker。
 2. HDMI 在 U-Boot menu 前顯示 logo。
