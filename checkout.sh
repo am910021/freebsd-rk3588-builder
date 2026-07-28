@@ -33,9 +33,14 @@ sync_repo()
 	url=$2
 	branch=$3
 	commit=$4
+	depth=${5:-}
 
 	if [ ! -e "$dir" ]; then
-		git clone "$url" "$dir"
+		if [ -n "$depth" ]; then
+			git clone --depth "$depth" --branch "$branch" "$url" "$dir"
+		else
+			git clone "$url" "$dir"
+		fi
 	fi
 
 	if git -C "$dir" remote get-url origin >/dev/null 2>&1; then
@@ -43,7 +48,12 @@ sync_repo()
 	else
 		git -C "$dir" remote add origin "$url"
 	fi
-	git -C "$dir" fetch --prune origin
+	if [ -n "$depth" ]; then
+		git -C "$dir" fetch --depth "$depth" --prune origin \
+			"${commit:-$branch}"
+	else
+		git -C "$dir" fetch --prune origin
+	fi
 
 	if [ -n "$commit" ]; then
 		git -C "$dir" reset --hard "$commit"
@@ -56,7 +66,11 @@ sync_repo()
 		git -C "$dir" checkout -b "$branch" --track "origin/$branch"
 	fi
 	git -C "$dir" branch --set-upstream-to="origin/$branch" "$branch"
-	git -C "$dir" pull --ff-only
+	if [ -n "$depth" ]; then
+		git -C "$dir" merge --ff-only "origin/$branch"
+	else
+		git -C "$dir" pull --ff-only
+	fi
 }
 
 mkdir -p "${TXZ_ROOT}" "${OUTPUT_ROOT}" "${SRC_ROOT}"
@@ -77,4 +91,5 @@ sync_repo "${RKBIN_SRC_DIR}" "$GIT_URL/rkbin.git" \
 sync_repo "${IF_RGE_SRC_DIR}" "$GIT_URL/if_rge_freebsd.git" \
 	"$IF_RGE_BRANCH" "$IF_RGE_COMMIT"
 sync_repo "${DEVICETREE_REBASING_SRC_DIR}" "$DEVICETREE_REBASING_URL" \
-	"$DEVICETREE_REBASING_BRANCH" "$DEVICETREE_REBASING_COMMIT"
+	"$DEVICETREE_REBASING_BRANCH" "$DEVICETREE_REBASING_COMMIT" \
+	"$DEVICETREE_REBASING_DEPTH"
