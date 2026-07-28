@@ -182,6 +182,15 @@ for marker in (
 ):
     if marker not in command:
         raise SystemExit(f"dualboot.cmd lacks marker: {marker!r}")
+
+lines = command.splitlines()
+for line in (
+    "setenv fdt_addr_r 0x0a100000",
+    "setenv fdtoverlay_addr_r 0x0a300000",
+    "setenv overlay_config_addr_r 0x0a500000",
+):
+    if line not in lines:
+        raise SystemExit(f"dualboot.cmd lacks safe load address: {line!r}")
 PY
 
 python3 - "${OUT}" "${FIRMWARE_MIB}" <<'PY'
