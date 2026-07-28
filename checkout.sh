@@ -66,6 +66,7 @@ check_repo "${FREEBSD_SRC_DIR}"
 check_repo "${UBOOT_SRC_DIR}"
 check_repo "${RKBIN_SRC_DIR}"
 check_repo "${IF_RGE_SRC_DIR}"
+check_repo "${DEVICETREE_REBASING_SRC_DIR}"
 
 sync_repo "${FREEBSD_SRC_DIR}" "$GIT_URL/freebsd-src.git" \
 	"$FREEBSD_BRANCH" "$FREEBSD_COMMIT"
@@ -75,3 +76,5 @@ sync_repo "${RKBIN_SRC_DIR}" "$GIT_URL/rkbin.git" \
 	"$RKBIN_BRANCH" "$RKBIN_COMMIT"
 sync_repo "${IF_RGE_SRC_DIR}" "$GIT_URL/if_rge_freebsd.git" \
 	"$IF_RGE_BRANCH" "$IF_RGE_COMMIT"
+sync_repo "${DEVICETREE_REBASING_SRC_DIR}" "$DEVICETREE_REBASING_URL" \
+	"$DEVICETREE_REBASING_BRANCH" "$DEVICETREE_REBASING_COMMIT"
