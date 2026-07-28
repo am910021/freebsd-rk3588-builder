@@ -59,8 +59,7 @@ sync_repo()
 	git -C "$dir" pull --ff-only
 }
 
-mkdir -p "${BUILDER_ROOT}/dtb" "${BUILDER_ROOT}/dts" \
-	"${BUILDER_ROOT}/menu" "${TXZ_ROOT}" "${OUTPUT_ROOT}" "${SRC_ROOT}"
+mkdir -p "${TXZ_ROOT}" "${OUTPUT_ROOT}" "${SRC_ROOT}"
 
 # Check every existing repository before changing any of them.
 check_repo "${FREEBSD_SRC_DIR}"

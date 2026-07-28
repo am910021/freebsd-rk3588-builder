@@ -172,7 +172,13 @@ for marker in (
         raise SystemExit(f"u-boot.bin lacks marker: {marker!r}")
 
 command = (out / "dualboot.cmd").read_text()
-for marker in ("R26-BOOTMENU-3S", "bootmenu_delay 3", "bootmenu 3"):
+for marker in (
+    "R26-BOOTMENU-3S",
+    "bootmenu_delay 3",
+    "bootmenu 3",
+    "/EFI/overlays.conf",
+    "fdt apply",
+):
     if marker not in command:
         raise SystemExit(f"dualboot.cmd lacks marker: {marker!r}")
 PY

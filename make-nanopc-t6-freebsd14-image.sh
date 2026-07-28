@@ -135,6 +135,10 @@ mount "/dev/${md}p3" "${root_mnt}"
 tar -xpf "${BASE_TXZ}" -C "${root_mnt}"
 tar -xpf "${KERNEL_TXZ}" -C "${root_mnt}"
 tar -xpf "${RGE_TXZ}" -C "${root_mnt}"
+if [ -d "${BOARD_FILES_DIR}" ]; then
+	(cd "${BOARD_FILES_DIR}" && tar -cpf - .) |
+	    (cd "${root_mnt}" && tar -xpf -)
+fi
 [ -f "${root_mnt}/boot/modules/if_rge.ko" ] ||
     die "if_rge package did not install /boot/modules/if_rge.ko"
 
@@ -209,16 +213,30 @@ echo "== Installing ESP =="
 newfs_msdos -L EFI -F 16 "/dev/${md}p1" >/dev/null
 mount -t msdosfs "/dev/${md}p1" "${esp_mnt}"
 mkdir -p "${esp_mnt}/EFI/BOOT" "${esp_mnt}/EFI/FreeBSD" \
-    "${esp_mnt}/EFI" "${esp_mnt}/dtb"
+    "${esp_mnt}/EFI/overlays" "${esp_mnt}/dtb"
 
 loader_tmp="${WORK}/loader.efi"
 root_mnt="${WORK}/root"
 mount -o ro "/dev/${md}p3" "${root_mnt}"
 [ -e "${root_mnt}/firstboot" ] || die "missing firstboot sentinel"
 cp -p "${root_mnt}/boot/loader.efi" "${loader_tmp}"
+for overlay in ${UBOOT_FDT_OVERLAYS}; do
+	case "${overlay}" in
+		*.dtbo) ;;
+		*) die "overlay name must end in .dtbo: ${overlay}" ;;
+	esac
+	case "${overlay}" in
+		*/*|*..*) die "invalid overlay name: ${overlay}" ;;
+	esac
+	overlay_src="${root_mnt}/boot/dtb/overlays/${overlay}"
+	[ -f "${overlay_src}" ] || die "missing overlay: ${overlay_src}"
+	cp -p "${overlay_src}" "${esp_mnt}/EFI/overlays/${overlay}"
+done
 umount "${root_mnt}"
 root_mnt=
 
+printf 'fdt_overlays=%s\n' "${UBOOT_FDT_OVERLAYS}" \
+    > "${esp_mnt}/EFI/overlays.conf"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/BOOT/BOOTAA64.EFI"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/FreeBSD/loader.efi"
 cp -p "${DTB}" "${esp_mnt}/dtb/rk3588-nanopc-t6.dtb"
@@ -269,6 +287,7 @@ U-Boot: ${UBOOT_DIR}
 U-Boot firmware: ${UBOOT_BIN}
 U-Boot firmware SHA256: ${firmware_sha}
 DTB: ${DTB}
+U-Boot FDT overlays: ${UBOOT_FDT_OVERLAYS}
 if_rge.txz: ${RGE_TXZ}
 if_rge.txz SHA256: ${rge_sha}
 Layout:
