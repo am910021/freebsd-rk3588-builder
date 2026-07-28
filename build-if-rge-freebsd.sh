@@ -19,19 +19,21 @@ die()
 	exit 1
 }
 
-[ -f "${RGE_DIR}/src/Makefile" ] || die "missing if_rge source: ${RGE_DIR}"
-[ -d "${FREEBSD_SRC}/sys" ] || die "missing FreeBSD source: ${FREEBSD_SRC}"
+[ -f "${IF_RGE_SRC_DIR}/src/Makefile" ] ||
+	die "missing if_rge source: ${IF_RGE_SRC_DIR}"
+[ -d "${FREEBSD_SRC_DIR}/sys" ] ||
+	die "missing FreeBSD source: ${FREEBSD_SRC_DIR}"
 [ -f "${KERNBUILDDIR}/opt_global.h" ] ||
 	die "missing kernel build directory: ${KERNBUILDDIR}"
 [ -x "${TOOLBIN}/cc" ] || die "missing arm64 toolchain: ${TOOLBIN}"
-[ -z "$(git -C "${RGE_DIR}" status --porcelain)" ] ||
+[ -z "$(git -C "${IF_RGE_SRC_DIR}" status --porcelain)" ] ||
 	die "if_rge source has uncommitted changes"
 
 for cmd in make git tar sha256 readelf mktemp; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
 
-commit=$(git -C "${RGE_DIR}" rev-parse --short HEAD)
+commit=$(git -C "${IF_RGE_SRC_DIR}" rev-parse --short HEAD)
 package=${OUTPUT_DIR}/if_rge-${commit}-freebsd14.3-arm64.txz
 work=$(mktemp -d "${TMPDIR:-/tmp}/if-rge-package.XXXXXX")
 trap 'rm -rf "${work}"' EXIT INT TERM
@@ -44,7 +46,7 @@ build_make()
 	    MACHINE=arm64 MACHINE_ARCH=aarch64 \
 	    TARGET=arm64 TARGET_ARCH=aarch64 \
 	    PATH="${TOOLBIN}:${PATH}" \
-	    make -C "${RGE_DIR}/src" SYSDIR="${FREEBSD_SRC}/sys" \
+	    make -C "${IF_RGE_SRC_DIR}/src" SYSDIR="${FREEBSD_SRC_DIR}/sys" \
 	    KERNBUILDDIR="${KERNBUILDDIR}" "$@"
 }
 

@@ -2,19 +2,13 @@
 
 set -eu
 
-GIT_URL=git@git.lo:yuri
-
-FREEBSD_BRANCH=yuri/14.3-p16_rk3588-overlay
-FREEBSD_COMMIT=
-
-UBOOT_BRANCH=yuri/nanopc-t6_lts
-UBOOT_COMMIT=
-
-IF_RGE_BRANCH=yuri/14.3
-IF_RGE_COMMIT=
-
-RKBIN_BRANCH=master
-RKBIN_COMMIT=
+BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
+[ -r "${BUILDER_CONFIG}" ] || {
+	echo "${0##*/}: missing config: ${BUILDER_CONFIG}" >&2
+	exit 1
+}
+. "${BUILDER_CONFIG}"
 
 check_repo()
 {
@@ -65,19 +59,20 @@ sync_repo()
 	git -C "$dir" pull --ff-only
 }
 
-mkdir -p dtb dts menu txz output src
+mkdir -p "${BUILDER_ROOT}/dtb" "${BUILDER_ROOT}/dts" \
+	"${BUILDER_ROOT}/menu" "${TXZ_ROOT}" "${OUTPUT_ROOT}" "${SRC_ROOT}"
 
 # Check every existing repository before changing any of them.
-check_repo src/freebsd-src
-check_repo src/u-boot-2017
-check_repo src/rkbin
-check_repo src/if_rge_freebsd
+check_repo "${FREEBSD_SRC_DIR}"
+check_repo "${UBOOT_SRC_DIR}"
+check_repo "${RKBIN_SRC_DIR}"
+check_repo "${IF_RGE_SRC_DIR}"
 
-sync_repo src/freebsd-src "$GIT_URL/freebsd-src.git" \
+sync_repo "${FREEBSD_SRC_DIR}" "$GIT_URL/freebsd-src.git" \
 	"$FREEBSD_BRANCH" "$FREEBSD_COMMIT"
-sync_repo src/u-boot-2017 "$GIT_URL/u-boot-rk3588.git" \
+sync_repo "${UBOOT_SRC_DIR}" "$GIT_URL/u-boot-rk3588.git" \
 	"$UBOOT_BRANCH" "$UBOOT_COMMIT"
-sync_repo src/rkbin "$GIT_URL/rkbin.git" \
+sync_repo "${RKBIN_SRC_DIR}" "$GIT_URL/rkbin.git" \
 	"$RKBIN_BRANCH" "$RKBIN_COMMIT"
-sync_repo src/if_rge_freebsd "$GIT_URL/if_rge_freebsd.git" \
+sync_repo "${IF_RGE_SRC_DIR}" "$GIT_URL/if_rge_freebsd.git" \
 	"$IF_RGE_BRANCH" "$IF_RGE_COMMIT"

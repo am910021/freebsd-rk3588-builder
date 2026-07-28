@@ -39,20 +39,20 @@ for file in "${IDBLOADER_SRC}" "${KERNEL_DTB}" "${MENU_CMD}" \
     "${LOGO_BMP}"; do
 	[ -f "${file}" ] || fail "missing input: ${file}"
 done
-[ -d "${VENDOR_SRC}" ] || fail "missing source: ${VENDOR_SRC}"
-[ -d "${RKBIN_DIR}" ] || fail "missing rkbin: ${RKBIN_DIR}"
+[ -d "${UBOOT_SRC_DIR}" ] || fail "missing source: ${UBOOT_SRC_DIR}"
+[ -d "${RKBIN_SRC_DIR}" ] || fail "missing rkbin: ${RKBIN_SRC_DIR}"
 [ -x "${MKIMAGE}" ] || fail "not executable: ${MKIMAGE}"
 for cmd in git rsync gmake gsed mktemp python3 sha256 \
     "${CROSS_COMPILE}gcc"; do
 	command -v "${cmd}" >/dev/null 2>&1 || fail "missing command: ${cmd}"
 done
 
-SOURCE_BRANCH=$(git -C "${VENDOR_SRC}" symbolic-ref --short HEAD)
-SOURCE_COMMIT=$(git -C "${VENDOR_SRC}" rev-parse HEAD)
+SOURCE_BRANCH=$(git -C "${UBOOT_SRC_DIR}" symbolic-ref --short HEAD)
+SOURCE_COMMIT=$(git -C "${UBOOT_SRC_DIR}" rev-parse HEAD)
 [ "${SOURCE_BRANCH}" = "yuri/nanopc-t6_lts" ] ||
     fail "unexpected source branch: ${SOURCE_BRANCH}"
-[ -z "$(git -C "${VENDOR_SRC}" status --porcelain)" ] ||
-    fail "source tree is not clean: ${VENDOR_SRC}"
+[ -z "$(git -C "${UBOOT_SRC_DIR}" status --porcelain)" ] ||
+    fail "source tree is not clean: ${UBOOT_SRC_DIR}"
 
 AUTO_WORK=0
 STAGING_OUT=
@@ -95,8 +95,8 @@ rsync -aH --delete \
     --exclude '/u-boot.itb' \
     --exclude '/u-boot.map' \
     --exclude '/u-boot.sym' \
-    "${VENDOR_SRC}/" "${BUILD_SRC}/"
-ln -s "${RKBIN_DIR}" "${WORK}/rkbin"
+    "${UBOOT_SRC_DIR}/" "${BUILD_SRC}/"
+ln -s "${RKBIN_SRC_DIR}" "${WORK}/rkbin"
 mkdir -p "${BUILD_SRC}/build-tools"
 ln -s /usr/local/bin/gmake "${BUILD_SRC}/build-tools/make"
 ln -s /usr/local/bin/gsed "${BUILD_SRC}/build-tools/sed"
@@ -136,8 +136,8 @@ fi
 cat > "${OUT}/BUILD-INFO.txt" <<EOF
 Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 Builder root: ${BUILDER_ROOT}
-Vendor source: ${VENDOR_SRC}
-rkbin: ${RKBIN_DIR}
+Vendor source: ${UBOOT_SRC_DIR}
+rkbin: ${RKBIN_SRC_DIR}
 idbloader: ${IDBLOADER_SRC}
 Embedded kernel DTB: ${KERNEL_DTB}
 Cross compile: ${CROSS_COMPILE}
