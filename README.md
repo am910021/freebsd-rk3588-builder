@@ -151,17 +151,17 @@ output/<FreeBSD 版本>/kernel.txz
 
 ## 建立 U-Boot
 
-預設建立 16 MiB firmware：
+Firmware 大小由 `builder.conf` 的 `FIRMWARE_MIB` 決定，只需執行：
 
 ```sh
 ./build-vendor2017-r26-complete.sh
 ```
 
-明確建立 16 或 32 MiB firmware：
+支援的值為：
 
-```sh
-./build-vendor2017-r26-complete.sh 16
-./build-vendor2017-r26-complete.sh 32
+```text
+FIRMWARE_MIB=16
+FIRMWARE_MIB=32
 ```
 
 輸出：
@@ -263,11 +263,12 @@ output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
     output/14.3-p16/nanopc-t6-lts-freebsd14.3.img
 ```
 
-使用 32 MiB U-Boot 時，兩個階段必須使用相同設定：
+`build-vendor2017-r26-complete.sh` 與 image builder 都使用
+`builder.conf` 的 `FIRMWARE_MIB`，不需分別傳入：
 
 ```sh
-./build-vendor2017-r26-complete.sh 32
-env FIRMWARE_MIB=32 ./make-nanopc-t6-freebsd14-image.sh
+./build-vendor2017-r26-complete.sh
+./make-nanopc-t6-freebsd14-image.sh
 ```
 
 預設 image layout：

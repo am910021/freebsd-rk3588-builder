@@ -9,14 +9,10 @@ BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
 }
 . "${BUILDER_CONFIG}"
 
-case $# in
-	0) ;;
-	1) FIRMWARE_MIB=$1 ;;
-	*)
-		echo "usage: ${0##*/} [16|32]" >&2
-		exit 1
-		;;
-esac
+[ "$#" -eq 0 ] || {
+	echo "usage: ${0##*/}" >&2
+	exit 1
+}
 case "${FIRMWARE_MIB}" in
 	16|32) ;;
 	*)
