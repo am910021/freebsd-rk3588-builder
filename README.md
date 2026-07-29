@@ -50,11 +50,14 @@ boards/nanopc-t6-lts/board.conf
 BOARD=nanopc-t6-lts
 FIRMWARE_MIB=16
 ESP_SIZE_MIB=256
-SWAP_SIZE_MIB=1024
-ROOT_SIZE_MIB=2048
+SWAP_SIZE_MIB=512
+ROOT_SIZE_MIB=1024
 IMAGE_TAIL_MIB=96
 JOBS=16
 ```
+
+設定 `SWAP_SIZE_MIB=0` 時不建立 swap partition，root filesystem 會成為
+`p2`；大於零時維持 `p2` swap、`p3` root。
 
 每個 board 分別指定 U-Boot 階段與 FreeBSD 階段使用的 DTB：
 
@@ -262,9 +265,24 @@ FIRMWARE_MIB=32 ./make-nanopc-t6-freebsd14-image.sh
 ```text
 0-16 MiB       raw U-Boot firmware 與 GPT metadata
 16-272 MiB     p1 EFI System Partition
-272-1296 MiB   p2 FreeBSD swap
-1296-3344 MiB  p3 FreeBSD UFS root
-3344-3440 MiB  未分配空間，供 growfs 使用
+272-784 MiB    p2 FreeBSD swap
+784-1808 MiB   p3 FreeBSD UFS root
+1808-1904 MiB  未分配空間，供 growfs 使用
+```
+
+不建立 swap：
+
+```sh
+SWAP_SIZE_MIB=0 ./make-nanopc-t6-freebsd14-image.sh
+```
+
+對應 layout：
+
+```text
+0-16 MiB       raw U-Boot firmware 與 GPT metadata
+16-272 MiB     p1 EFI System Partition
+272-1296 MiB   p2 FreeBSD UFS root
+1296-1392 MiB  未分配空間，供 growfs 使用
 ```
 
 Image 內會安裝：

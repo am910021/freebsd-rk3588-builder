@@ -43,6 +43,20 @@ DUALBOOT_CMD=${UBOOT_DIR}/dualboot.cmd
 DUALBOOT_SCR=${UBOOT_DIR}/dualboot.scr
 ROOT_LABEL=nanopc_t6_root
 
+die()
+{
+	echo "${0##*/}: $*" >&2
+	exit 1
+}
+
+case "${FIRMWARE_MIB}" in
+	16|32) ;;
+	*) die "firmware size must be 16 or 32 MiB" ;;
+esac
+case "${SWAP_SIZE_MIB}" in
+	''|*[!0-9]*) die "swap size must be a non-negative integer" ;;
+esac
+
 SECTORS_PER_MIB=2048
 ESP_END_MIB=$((FIRMWARE_MIB + ESP_SIZE_MIB))
 SWAP_END_MIB=$((ESP_END_MIB + SWAP_SIZE_MIB))
@@ -56,22 +70,15 @@ SWAP_SECTORS=$((SWAP_SIZE_MIB * SECTORS_PER_MIB))
 ROOT_START=$((SWAP_END_MIB * SECTORS_PER_MIB))
 ROOT_SECTORS=$((ROOT_SIZE_MIB * SECTORS_PER_MIB))
 TOTAL_SECTORS=$((IMAGE_SIZE_MIB * SECTORS_PER_MIB))
+ROOT_PARTITION=2
+if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
+	ROOT_PARTITION=3
+fi
 
 md=
 root_mnt=
 esp_mnt=
 AUTO_WORK=0
-
-die()
-{
-	echo "${0##*/}: $*" >&2
-	exit 1
-}
-
-case "${FIRMWARE_MIB}" in
-	16|32) ;;
-	*) die "firmware size must be 16 or 32 MiB" ;;
-esac
 
 if [ -z "${RGE_TXZ}" ]; then
 	for candidate in "${TXZ_ROOT}"/if_rge*.txz; do
@@ -134,14 +141,16 @@ dd if="${UBOOT_BIN}" of="${OUT}" bs=1m conv=notrunc,sync status=none
 md=$(mdconfig -a -t vnode -f "${OUT}")
 gpart create -s gpt "${md}"
 gpart add -b "${ESP_START}" -s "${ESP_SECTORS}" -t efi -l EFI "${md}"
-gpart add -b "${SWAP_START}" -s "${SWAP_SECTORS}" -t freebsd-swap \
-    -l growfs_swap "${md}"
+if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
+	gpart add -b "${SWAP_START}" -s "${SWAP_SECTORS}" -t freebsd-swap \
+	    -l growfs_swap "${md}"
+fi
 gpart add -b "${ROOT_START}" -s "${ROOT_SECTORS}" -t freebsd-ufs \
     -l freebsd_root "${md}"
 
 echo "== Installing FreeBSD 14.3 root filesystem =="
-newfs -U -L "${ROOT_LABEL}" "/dev/${md}p3" >/dev/null
-mount "/dev/${md}p3" "${root_mnt}"
+newfs -U -L "${ROOT_LABEL}" "/dev/${md}p${ROOT_PARTITION}" >/dev/null
+mount "/dev/${md}p${ROOT_PARTITION}" "${root_mnt}"
 tar -xpf "${BASE_TXZ}" -C "${root_mnt}"
 tar -xpf "${KERNEL_TXZ}" -C "${root_mnt}"
 tar -xpf "${RGE_TXZ}" -C "${root_mnt}"
@@ -159,7 +168,13 @@ touch "${root_mnt}/firstboot"
 cat > "${root_mnt}/etc/fstab" <<'EOF'
 /dev/ufs/nanopc_t6_root	/		ufs	rw,noatime		1 1
 /dev/msdosfs/EFI		/boot/efi	msdosfs	rw,noatime,noauto	0 0
+EOF
+if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
+	cat >> "${root_mnt}/etc/fstab" <<'EOF'
 /dev/gpt/growfs_swap		none		swap	sw			0 0
+EOF
+fi
+cat >> "${root_mnt}/etc/fstab" <<'EOF'
 md				/tmp		mfs	rw,noatime,-s256m	0 0
 md				/var/log	mfs	rw,noatime,-s64m	0 0
 md				/var/tmp	mfs	rw,noatime,-s64m	0 0
@@ -228,7 +243,7 @@ mkdir -p "${esp_mnt}/EFI/BOOT" "${esp_mnt}/EFI/FreeBSD" \
 
 loader_tmp="${WORK}/loader.efi"
 root_mnt="${WORK}/root"
-mount -o ro "/dev/${md}p3" "${root_mnt}"
+mount -o ro "/dev/${md}p${ROOT_PARTITION}" "${root_mnt}"
 [ -e "${root_mnt}/firstboot" ] || die "missing firstboot sentinel"
 cp -p "${root_mnt}/boot/loader.efi" "${loader_tmp}"
 for overlay in ${UBOOT_FDT_OVERLAYS}; do
@@ -263,7 +278,7 @@ esp_mnt=
 echo "== Verifying image =="
 gpart show -p "${md}"
 fsck_msdosfs -n "/dev/${md}p1"
-fsck_ufs -n "/dev/${md}p3"
+fsck_ufs -n "/dev/${md}p${ROOT_PARTITION}"
 mkimage -l "${DUALBOOT_SCR}" >/dev/null
 
 python3 - "${OUT}" "${UBOOT_BIN}" <<'PY'
@@ -299,8 +314,18 @@ if_rge.txz SHA256: ${rge_sha}
 Layout:
   raw firmware:  0-${FIRMWARE_MIB} MiB
   p1 ESP:        ${FIRMWARE_MIB}-${ESP_END_MIB} MiB
+EOF
+if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
+	cat >> "${OUT}.build-info.txt" <<EOF
   p2 swap:       ${ESP_END_MIB}-${SWAP_END_MIB} MiB
   p3 UFS root:   ${SWAP_END_MIB}-${ROOT_END_MIB} MiB
+EOF
+else
+	cat >> "${OUT}.build-info.txt" <<EOF
+  p2 UFS root:   ${ESP_END_MIB}-${ROOT_END_MIB} MiB
+EOF
+fi
+cat >> "${OUT}.build-info.txt" <<EOF
   free tail:     ${ROOT_END_MIB}-${IMAGE_SIZE_MIB} MiB
 EOF
 
