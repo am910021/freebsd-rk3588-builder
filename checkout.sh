@@ -73,7 +73,7 @@ sync_repo()
 	fi
 }
 
-mkdir -p "${TXZ_ROOT}" "${OUTPUT_ROOT}" "${SRC_ROOT}"
+mkdir -p "${WORK_ROOT}" "${IMAGE_OUTPUT_DIR}" "${TXZ_ROOT}" "${SRC_ROOT}"
 
 # Check every existing repository before changing any of them.
 check_repo "${FREEBSD_SRC_DIR}"

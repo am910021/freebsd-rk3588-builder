@@ -11,7 +11,7 @@ BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
 
 STAMP=${STAMP:-$(date +%Y%m%d-%H%M%S)}
 LOGO_BMP=${LOGO_BMP:-${IMAGE_LOGO_BMP}}
-OUT=${OUT:-${OUTPUT_ROOT}/nanopc-t6-lts-freebsd14.3-r26-${STAMP}.img}
+OUT=${OUT:-${IMAGE_OUTPUT_DIR}/nanopc-t6-lts-freebsd14.3-r26-${STAMP}.img}
 WORK=${WORK:-}
 
 usage()
@@ -113,7 +113,8 @@ for cmd in mdconfig gpart newfs newfs_msdos mount umount tar \
 done
 
 if [ -z "${WORK}" ]; then
-	WORK=$(mktemp -d "${TMPDIR:-/tmp}/nanopc-t6-image.XXXXXX")
+	mkdir -p "${WORK_ROOT}/tmp"
+	WORK=$(mktemp -d "${WORK_ROOT}/tmp/nanopc-t6-image.XXXXXX")
 	AUTO_WORK=1
 else
 	[ ! -e "${WORK}" ] || die "work directory already exists: ${WORK}"

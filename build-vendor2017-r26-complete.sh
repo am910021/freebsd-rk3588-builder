@@ -25,7 +25,7 @@ case "${FIRMWARE_MIB}" in
 		;;
 esac
 
-FINAL_OUT=${OUTPUT_ROOT}/uboot-r26-${FIRMWARE_MIB}m
+FINAL_OUT=${WORK_ROOT}/uboot-r26-${FIRMWARE_MIB}m
 WORK=${WORK:-}
 LOGO_BMP=${LOGO_BMP:-${UBOOT_LOGO_BMP}}
 
@@ -53,10 +53,12 @@ SOURCE_COMMIT=$(git -C "${UBOOT_SRC_DIR}" rev-parse HEAD)
 [ -z "$(git -C "${UBOOT_SRC_DIR}" status --porcelain)" ] ||
     fail "source tree is not clean: ${UBOOT_SRC_DIR}"
 
+mkdir -p "${WORK_ROOT}/tmp"
+
 AUTO_WORK=0
 STAGING_OUT=
 if [ -z "${WORK}" ]; then
-	WORK=$(mktemp -d "${TMPDIR:-/tmp}/nanopc-t6-uboot.XXXXXX")
+	WORK=$(mktemp -d "${WORK_ROOT}/tmp/nanopc-t6-uboot.XXXXXX")
 	AUTO_WORK=1
 else
 	[ ! -e "${WORK}" ] || fail "work directory already exists: ${WORK}"
@@ -73,9 +75,8 @@ cleanup()
 }
 trap cleanup EXIT INT TERM
 
-mkdir -p "${OUTPUT_ROOT}"
 STAGING_OUT=$(mktemp -d \
-    "${OUTPUT_ROOT}/.uboot-r26-${FIRMWARE_MIB}m.XXXXXX")
+    "${WORK_ROOT}/tmp/uboot-r26-${FIRMWARE_MIB}m.XXXXXX")
 OUT=${STAGING_OUT}
 BUILD_SRC="${WORK}/u-boot"
 rsync -aH --delete \
@@ -273,12 +274,16 @@ EOF
 	    > SHA256SUMS
 )
 
-rm -rf "${FINAL_OUT}"
+if [ -e "${FINAL_OUT}" ]; then
+	mkdir -p "${HOME}/ready-to-delete"
+	mv "${FINAL_OUT}" \
+	    "${HOME}/ready-to-delete/${FINAL_OUT##*/}-$(date +%Y%m%d-%H%M%S)-$$"
+fi
 mv "${OUT}" "${FINAL_OUT}"
 STAGING_OUT=
 OUT=${FINAL_OUT}
 
-ln -sfn "${OUT}" "${OUTPUT_ROOT}/uboot-latest"
+ln -sfn "${OUT}" "${WORK_ROOT}/uboot-latest"
 echo "== R26 complete bundle =="
 ls -lh "${OUT}/idbloader.img" "${OUT}/u-boot.itb" \
     "${OUT}/logo.img" \

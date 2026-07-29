@@ -14,16 +14,19 @@
 freebsd-rk3588-builder/
 ├── boards/                         board 專屬設定、DTB、menu 與檔案覆蓋
 ├── dtb/                            相容用的共用 DTB
-├── output/                         所有建置產物
+├── output/                         可交付產物
+│   ├── img/
+│   └── txz/
 ├── src/
 │   ├── devicetree-rebasing/
 │   ├── freebsd-src/
 │   ├── if_rge_freebsd/
 │   ├── rkbin/
 │   └── u-boot-2017/
-├── txz/
-│   ├── base.txz
-│   └── kernel.txz
+├── work/                           可重建的 object 與中間產物
+│   ├── if_rge_freebsd/
+│   ├── obj/
+│   └── uboot-r26-16m/
 ├── builder.conf                    共用設定
 ├── checkout.sh                     取得及更新原始碼
 ├── build-freebsd-release.sh        建立 FreeBSD base.txz 與 kernel.txz
@@ -32,7 +35,7 @@ freebsd-rk3588-builder/
 └── make-nanopc-t6-freebsd14-image.sh
 ```
 
-`src/`、`txz/` 與 `output/` 不納入 builder Git repository。
+`src/`、`work/` 與 `output/` 不納入 builder Git repository。
 
 ## 設定
 
@@ -88,10 +91,10 @@ cd /root/freebsd-rk3588-builder
 建立完整 image 前需要：
 
 ```text
-txz/base.txz
-txz/kernel.txz
-output/if_rge_freebsd/if_rge.txz
-output/uboot-latest/
+output/txz/base.txz
+output/txz/kernel.txz
+output/txz/if_rge.txz
+work/uboot-latest/
 ```
 
 `base.txz` 與 `kernel.txz` 由目前的 FreeBSD arm64 release build 產生。
@@ -106,7 +109,7 @@ output/uboot-latest/
 ```sh
 FREEBSD_SRC_DIR=${BUILDER_ROOT}/src/freebsd-src
 FREEBSD_OBJ_VERSION=14.3-p16  # 從 sys/conf/newvers.sh 自動取得
-FREEBSD_OBJ_ROOT=${BUILDER_ROOT}/output/obj/${FREEBSD_OBJ_VERSION}
+FREEBSD_OBJ_ROOT=${BUILDER_ROOT}/work/obj/${FREEBSD_OBJ_VERSION}
 FREEBSD_OBJ=${FREEBSD_OBJ_ROOT}/arm64.aarch64
 KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 ```
@@ -124,14 +127,14 @@ cd /root/freebsd-rk3588-builder
 腳本使用：
 
 - `src/freebsd-src`
-- `output/obj/<FreeBSD 版本>/arm64.aarch64`
+- `work/obj/<FreeBSD 版本>/arm64.aarch64`
 - `boards/nanopc-t6-lts/board.conf` 的 `FREEBSD_KERNCONF`
 
 輸出：
 
 ```text
-txz/base.txz
-txz/kernel.txz
+output/txz/base.txz
+output/txz/kernel.txz
 ```
 
 ## 建立 U-Boot
@@ -152,7 +155,7 @@ txz/kernel.txz
 輸出：
 
 ```text
-output/uboot-r26-16m/
+work/uboot-r26-16m/
 ├── idbloader.img
 ├── u-boot.itb
 ├── uboot-runtime.dtb
@@ -166,7 +169,7 @@ output/uboot-r26-16m/
 └── SHA256SUMS
 ```
 
-`output/uboot-latest` 會指向最新完成的 bundle。
+`work/uboot-latest` 會指向最新完成的 bundle。
 
 ### Device trees
 
@@ -225,10 +228,9 @@ NanoPC-T6-SD-FULL-R26-BOOTMENU-3S-LOGOFIX1
 輸出：
 
 ```text
-output/if_rge_freebsd/
-├── if_rge.ko
-├── if_rge-<commit>-freebsd14.3-arm64.txz
-└── if_rge.txz -> if_rge-<commit>-freebsd14.3-arm64.txz
+work/if_rge_freebsd/if_rge.ko
+output/txz/if_rge-<commit>-freebsd14.3-p16-arm64.txz
+output/txz/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
 ```
 
 ## 建立 FreeBSD image
@@ -243,10 +245,10 @@ output/if_rge_freebsd/
 
 ```sh
 ./make-nanopc-t6-freebsd14-image.sh \
-    txz/base.txz \
-    txz/kernel.txz \
-    output/if_rge_freebsd/if_rge.txz \
-    output/nanopc-t6-lts-freebsd14.3.img
+    output/txz/base.txz \
+    output/txz/kernel.txz \
+    output/txz/if_rge.txz \
+    output/img/nanopc-t6-lts-freebsd14.3.img
 ```
 
 使用 32 MiB U-Boot 時，兩個階段必須使用相同設定：
@@ -289,7 +291,7 @@ Image 內會安裝：
 寫入前必須再次確認目標裝置名稱；這個動作會覆蓋整個裝置：
 
 ```sh
-dd if=output/<image>.img of=/dev/daX bs=1m conv=sync status=progress
+dd if=output/img/<image>.img of=/dev/daX bs=1m conv=sync status=progress
 sync
 ```
 

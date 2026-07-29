@@ -10,7 +10,7 @@ BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
 }
 . "${BUILDER_CONFIG}"
 
-OUTPUT_DIR=${OUTPUT_DIR:-${RGE_OUTPUT_DIR}}
+OUTPUT_DIR=${OUTPUT_DIR:-${RGE_WORK_DIR}}
 OBJ_ROOT=${OBJ_ROOT:-${RGE_OBJ_ROOT}}
 
 die()
@@ -34,11 +34,12 @@ for cmd in make git tar sha256 readelf mktemp; do
 done
 
 commit=$(git -C "${IF_RGE_SRC_DIR}" rev-parse --short HEAD)
-package=${OUTPUT_DIR}/if_rge-${commit}-freebsd${FREEBSD_OBJ_VERSION}-arm64.txz
-work=$(mktemp -d "${TMPDIR:-/tmp}/if-rge-package.XXXXXX")
+package=${TXZ_ROOT}/if_rge-${commit}-freebsd${FREEBSD_OBJ_VERSION}-arm64.txz
+mkdir -p "${OUTPUT_DIR}" "${OBJ_ROOT}" "${TXZ_ROOT}" "${WORK_ROOT}/tmp"
+work=$(mktemp -d "${WORK_ROOT}/tmp/if-rge-package.XXXXXX")
 trap 'rm -rf "${work}"' EXIT INT TERM
 
-mkdir -p "${OUTPUT_DIR}" "${OBJ_ROOT}" "${work}/boot/modules"
+mkdir -p "${work}/boot/modules"
 
 build_make()
 {
@@ -62,7 +63,7 @@ readelf -h "${module}" | grep -q 'Machine:.*AArch64' ||
 cp -p "${module}" "${OUTPUT_DIR}/if_rge.ko"
 cp -p "${module}" "${work}/boot/modules/if_rge.ko"
 tar -cJf "${package}" -C "${work}" boot/modules/if_rge.ko
-ln -sfn "${package##*/}" "${OUTPUT_DIR}/if_rge.txz"
+ln -sfn "${package##*/}" "${TXZ_ROOT}/if_rge.txz"
 
 sha256 "${OUTPUT_DIR}/if_rge.ko" "${package}" > "${package}.sha256"
 
