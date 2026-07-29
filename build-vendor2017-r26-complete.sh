@@ -44,7 +44,7 @@ done
 
 SOURCE_BRANCH=$(git -C "${UBOOT_SRC_DIR}" symbolic-ref --short HEAD)
 SOURCE_COMMIT=$(git -C "${UBOOT_SRC_DIR}" rev-parse HEAD)
-[ "${SOURCE_BRANCH}" = "yuri/nanopc-t6_lts" ] ||
+[ "${SOURCE_BRANCH}" = "${UBOOT_BRANCH}" ] ||
     fail "unexpected source branch: ${SOURCE_BRANCH}"
 [ -z "$(git -C "${UBOOT_SRC_DIR}" status --porcelain)" ] ||
     fail "source tree is not clean: ${UBOOT_SRC_DIR}"
@@ -165,6 +165,7 @@ for marker in (
     b"NanoPC-T6 LTS SD full U-Boot R26-BOOTMENU-3S",
     b"bootmenu_delay=3",
     b"LOGO: raw blocks",
+    b"rk_boot_storage",
 ):
     if marker not in binary:
         raise SystemExit(f"u-boot.bin lacks marker: {marker!r}")
@@ -176,6 +177,7 @@ for marker in (
     "bootmenu 3",
     "/EFI/overlays.conf",
     "fdt apply",
+    "rockchip,boot-storage",
 ):
     if marker not in command:
         raise SystemExit(f"dualboot.cmd lacks marker: {marker!r}")
