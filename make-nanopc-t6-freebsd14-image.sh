@@ -17,7 +17,7 @@ ROOTFS_SUFFIX=
 if [ "${ROOTFS_TYPE}" = "zfs" ]; then
 	ROOTFS_SUFFIX=-zfs
 fi
-OUT=${OUT:-${IMAGE_OUTPUT_DIR}/nanopc-t6-lts-freebsd14.3${ROOTFS_SUFFIX}-r26-${STAMP}.img}
+OUT=${OUT:-${IMAGE_OUTPUT_DIR}/nanopc-t6-lts-freebsd14.3${ROOTFS_SUFFIX}-uboot2026.07-${STAMP}.img}
 WORK=${WORK:-}
 
 usage()
@@ -158,7 +158,7 @@ mkdir -p "${root_mnt}" "${esp_mnt}"
 
 echo "== Creating GPT image =="
 truncate -s $((TOTAL_SECTORS * 512)) "${OUT}"
-echo "== Installing complete ${FIRMWARE_MIB} MiB U-Boot R26 firmware =="
+echo "== Installing complete ${FIRMWARE_MIB} MiB U-Boot 2026.07 firmware =="
 dd if="${UBOOT_BIN}" of="${OUT}" bs=1m conv=notrunc,sync status=none
 md=$(mdconfig -a -t vnode -f "${OUT}")
 gpart create -s gpt "${md}"

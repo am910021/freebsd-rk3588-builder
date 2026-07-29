@@ -84,7 +84,7 @@ check_repo "${DEVICETREE_REBASING_SRC_DIR}"
 
 sync_repo "${FREEBSD_SRC_DIR}" "$GIT_URL/freebsd-src.git" \
 	"$FREEBSD_BRANCH" "$FREEBSD_COMMIT"
-sync_repo "${UBOOT_SRC_DIR}" "$GIT_URL/u-boot-rk3588.git" \
+sync_repo "${UBOOT_SRC_DIR}" "${UBOOT_URL}" \
 	"$UBOOT_BRANCH" "$UBOOT_COMMIT"
 sync_repo "${RKBIN_SRC_DIR}" "$GIT_URL/rkbin.git" \
 	"$RKBIN_BRANCH" "$RKBIN_COMMIT"

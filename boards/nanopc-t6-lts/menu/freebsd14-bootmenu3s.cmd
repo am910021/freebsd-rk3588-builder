@@ -1,4 +1,4 @@
-echo "NanoPC-T6 LTS FreeBSD 14.3 image R26-BOOTMENU-3S"
+echo "NanoPC-T6 LTS FreeBSD 14.3 boot menu"
 echo "Default after timeout: FreeBSD 14.3"
 
 setenv scriptaddr 0x00500000

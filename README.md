@@ -2,7 +2,7 @@
 
 在 FreeBSD amd64 主機上建立 NanoPC-T6 LTS 使用的：
 
-- FriendlyELEC/Rockchip vendor U-Boot 2017 R26
+- U-Boot 2026.07 for NanoPC-T6 LTS
 - `if_rge.ko` kernel module 套件
 - FreeBSD 14.3 arm64 SD card image
 
@@ -21,15 +21,15 @@ freebsd-rk3588-builder/
 │   ├── freebsd-src/
 │   ├── if_rge_freebsd/
 │   ├── rkbin/
-│   └── u-boot-2017/
+│   └── u-boot-2026.07/
 ├── work/                           可重建的 object 與中間產物
 │   ├── if_rge_freebsd/
 │   ├── obj/
-│   └── uboot-r26-16m/
+│   └── uboot-2026.07-16m/
 ├── builder.conf                    共用設定
 ├── checkout.sh                     取得及更新原始碼
 ├── build-freebsd-release.sh        建立 FreeBSD base.txz 與 kernel.txz
-├── build-vendor2017-r26-complete.sh
+├── build-u-boot-2026.07-complete.sh
 ├── build-if-rge-freebsd.sh
 └── make-nanopc-t6-freebsd14-image.sh
 ```
@@ -69,16 +69,20 @@ env ROOTFS_TYPE=zfs ROOT_SIZE_MIB=2048 \
 ZFS pool 預設為 `nanopc_t6`，bootfs 為
 `nanopc_t6/ROOT/default`。可以用 `ZFS_POOL_NAME` 覆蓋 pool 名稱。
 
-每個 board 分別指定 U-Boot 階段與 FreeBSD 階段使用的 DTB：
+每個 board 指定交給 FreeBSD loader 使用的 DTB：
 
 ```sh
-UBOOT_RUNTIME_DTB=${BOARD_DIR}/dtb/rk3588-nanopi6-rev07.dtb
 FREEBSD_DTB=${BOARD_DIR}/dtb/rk3588-nanopc-t6.dtb
 ```
+
+U-Boot control DTB 由 `src/u-boot-2026.07` 的
+`nanopc-t6-rk3588_defconfig` 建置，不再嵌入 vendor 2017 的 runtime
+DTB。
 
 Git 來源可以使用 branch，或用 commit 固定版本：
 
 ```sh
+UBOOT_URL=git@git.lo:yuri/u-boot.git
 UBOOT_BRANCH=yuri/nanopc-t6_lts
 UBOOT_COMMIT=
 RKBIN_BRANCH=master
@@ -154,7 +158,7 @@ output/<FreeBSD 版本>/kernel.txz
 Firmware 大小由 `builder.conf` 的 `FIRMWARE_MIB` 決定，只需執行：
 
 ```sh
-./build-vendor2017-r26-complete.sh
+./build-u-boot-2026.07-complete.sh
 ```
 
 支援的值為：
@@ -167,10 +171,10 @@ FIRMWARE_MIB=32
 輸出：
 
 ```text
-work/uboot-r26-16m/
+work/uboot-2026.07-16m/
 ├── idbloader.img
 ├── u-boot.itb
-├── uboot-runtime.dtb
+├── uboot-control.dtb
 ├── logo.bmp
 ├── logo.img
 ├── dualboot.cmd
@@ -185,26 +189,27 @@ work/uboot-r26-16m/
 
 ### Device trees
 
-`UBOOT_RUNTIME_DTB` 會以 `dts/kern.dtb` 嵌入 `u-boot.itb` 的
-`kern-fdt`，供 vendor U-Boot runtime 初始化硬體。
+U-Boot FIT 內的 control DTB 直接由 U-Boot 2026.07 source 建置。
+Builder 只關閉不參與目標 firmware 的 `TOOLS_MKEFICAPSULE` host tool，
+因此 FreeBSD build host 不需要額外安裝 GnuTLS headers。
 
-`FREEBSD_DTB` 會複製到 ESP；U-Boot menu 載入它、套用 DTBO，再透過
-`bootefi` 交給 FreeBSD `loader.efi`。
+`FREEBSD_DTB` 會複製到 ESP；R81 內建 menu 直接載入它，再透過
+`bootefi` 交給 FreeBSD `loader.efi`。Image 仍保留可手動執行的
+`dualboot.scr` 與 DTBO 檔案，但 R81 的預設 `bootcmd` 不會載入它們。
 
 ### idbloader
 
-`idbloader.img` 不再使用固定的 prebuilt。腳本在完成 U-Boot 編譯後執行：
+`idbloader.img` 由標準 U-Boot build 直接產生：
 
 ```sh
-./make.sh "CROSS_COMPILE=${CROSS_COMPILE}" --idblock
+gmake O=<build-dir> \
+    BL31="${UBOOT_BL31}" \
+    ROCKCHIP_TPL="${UBOOT_ROCKCHIP_TPL}"
 ```
 
-Vendor `make.sh` 會讀取 rkbin 的 `RKBOOT/RK3588MINIALL.ini`，將
-`FlashData` 指定的 DDR/TPL 與 `FlashBoot` 指定的 SPL 封裝為 Rockchip
-`rksd` ID block。
-
-因此 DDR 與 SPL 版本由 `RKBIN_BRANCH` 或 `RKBIN_COMMIT` 決定。更新
-rkbin 後必須重新進行冷開機測試。
+預設固定使用已驗證的 rkbin commit
+`feab2172b40f831a1f0c0e2eacc348c19ea2f780`、BL31 v1.48 與 DDR TPL
+v1.18。更新 rkbin 後必須重新進行冷開機測試。
 
 ### Firmware layout
 
@@ -220,15 +225,15 @@ rkbin 後必須重新進行冷開機測試。
 
 ```text
 0-8 MiB       idbloader/SPL 保留區
-8-16 MiB      u-boot.itb 保留區
-16-32 MiB     logo raw 區域
+8-12 MiB      u-boot.itb 保留區
+12-32 MiB     logo raw 區域
 ```
 
-目前 R26 包含固定 raw logo 讀取、logo 邊界檢查、vidconsole 初始化後
-恢復 logo，以及 3 秒 U-Boot menu：
+目前 R81 包含 raw logo、HDMI/vidconsole、FreeBSD EFI 啟動，以及
+3 秒內建 U-Boot menu：
 
 ```text
-NanoPC-T6-SD-FULL-R26-BOOTMENU-3S-LOGOFIX1
+NanoPC-T6-LTS-2026.07-R81-LOGO
 ```
 
 ## 建立 if_rge
@@ -263,11 +268,11 @@ output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
     output/14.3-p16/nanopc-t6-lts-freebsd14.3.img
 ```
 
-`build-vendor2017-r26-complete.sh` 與 image builder 都使用
+`build-u-boot-2026.07-complete.sh` 與 image builder 都使用
 `builder.conf` 的 `FIRMWARE_MIB`，不需分別傳入：
 
 ```sh
-./build-vendor2017-r26-complete.sh
+./build-u-boot-2026.07-complete.sh
 ./make-nanopc-t6-freebsd14-image.sh
 ```
 
@@ -304,7 +309,7 @@ Image 內會安裝：
 - `/EFI/FreeBSD/loader.efi`
 - `FREEBSD_DTB`
 - `/EFI/overlays.conf` 與 board 指定的 DTBO
-- R26 U-Boot menu
+- U-Boot 2026.07 內建 boot menu
 - `if_rge.ko`
 - `growfs_enable="YES"`
 - `boot_multicons="YES"`
@@ -328,7 +333,7 @@ sync
 
 每次變更 U-Boot、rkbin、任一 DTB 或 FreeBSD kernel 後，至少確認：
 
-1. UART 顯示 DDR、SPL 與 R26 版本 marker。
+1. UART 顯示 DDR、SPL 與 U-Boot 2026.07 版本 marker。
 2. HDMI 在 U-Boot menu 前顯示 logo。
 3. U-Boot menu 倒數為 3 秒。
 4. FreeBSD loader menu 可由 HDMI 與 UART 顯示。
