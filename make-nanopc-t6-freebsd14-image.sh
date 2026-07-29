@@ -199,7 +199,8 @@ idb_sha=$(sha256 -q "${IDBLOADER}")
 uboot_sha=$(sha256 -q "${UBOOT_ITB}")
 dtb_sha=$(sha256 -q "${FREEBSD_DTB}")
 logo_sha=$(sha256 -q "${LOGO_BMP}")
-src_commit=$(git -C /usr/src rev-parse --short HEAD 2>/dev/null || echo unknown)
+src_commit=$(git -C "${FREEBSD_SRC_DIR}" rev-parse --short HEAD 2>/dev/null ||
+    echo unknown)
 
 cat > "${root_mnt}/etc/nanopc-t6-image-build.txt" <<EOF
 FreeBSD source commit: ${src_commit}

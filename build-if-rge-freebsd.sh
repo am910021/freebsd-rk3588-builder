@@ -34,7 +34,7 @@ for cmd in make git tar sha256 readelf mktemp; do
 done
 
 commit=$(git -C "${IF_RGE_SRC_DIR}" rev-parse --short HEAD)
-package=${OUTPUT_DIR}/if_rge-${commit}-freebsd14.3-arm64.txz
+package=${OUTPUT_DIR}/if_rge-${commit}-freebsd${FREEBSD_OBJ_VERSION}-arm64.txz
 work=$(mktemp -d "${TMPDIR:-/tmp}/if-rge-package.XXXXXX")
 trap 'rm -rf "${work}"' EXIT INT TERM
 

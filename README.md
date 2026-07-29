@@ -26,6 +26,7 @@ freebsd-rk3588-builder/
 │   └── kernel.txz
 ├── builder.conf                    共用設定
 ├── checkout.sh                     取得及更新原始碼
+├── build-freebsd-release.sh        建立 FreeBSD base.txz 與 kernel.txz
 ├── build-vendor2017-r26-complete.sh
 ├── build-if-rge-freebsd.sh
 └── make-nanopc-t6-freebsd14-image.sh
@@ -94,14 +95,43 @@ output/uboot-latest/
 ```
 
 `base.txz` 與 `kernel.txz` 由目前的 FreeBSD arm64 release build 產生。
-builder 尚未包裝 `buildworld/buildkernel/release` 流程。
-
-`build-if-rge-freebsd.sh` 需要相同 FreeBSD source 所建立的 kernel object
-與 arm64 toolchain，預設位置由以下設定控制：
+使用 builder 內的 source 與 object 目錄建立：
 
 ```sh
-FREEBSD_OBJ=/usr/obj/usr/src/arm64.aarch64
+./build-freebsd-release.sh
+```
+
+預設路徑：
+
+```sh
+FREEBSD_SRC_DIR=${BUILDER_ROOT}/src/freebsd-src
+FREEBSD_OBJ_VERSION=14.3-p16  # 從 sys/conf/newvers.sh 自動取得
+FREEBSD_OBJ_ROOT=${BUILDER_ROOT}/output/obj/${FREEBSD_OBJ_VERSION}
+FREEBSD_OBJ=${FREEBSD_OBJ_ROOT}/arm64.aarch64
 KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
+```
+
+`build-if-rge-freebsd.sh` 會直接使用同一套 kernel object 與 arm64
+toolchain。
+
+## 建立 FreeBSD base 與 kernel
+
+```sh
+cd /root/freebsd-rk3588-builder
+./build-freebsd-release.sh
+```
+
+腳本使用：
+
+- `src/freebsd-src`
+- `output/obj/<FreeBSD 版本>/arm64.aarch64`
+- `boards/nanopc-t6-lts/board.conf` 的 `FREEBSD_KERNCONF`
+
+輸出：
+
+```text
+txz/base.txz
+txz/kernel.txz
 ```
 
 ## 建立 U-Boot
