@@ -59,6 +59,16 @@ JOBS=16
 設定 `SWAP_SIZE_MIB=0` 時不建立 swap partition，root filesystem 會成為
 `p2`；大於零時維持 `p2` swap、`p3` root。
 
+Root filesystem 預設為 UFS。建立 ZFS root image 時建議至少配置 2 GiB：
+
+```sh
+env ROOTFS_TYPE=zfs ROOT_SIZE_MIB=2048 \
+    ./make-nanopc-t6-freebsd14-image.sh
+```
+
+ZFS pool 預設為 `nanopc_t6`，bootfs 為
+`nanopc_t6/ROOT/default`。可以用 `ZFS_POOL_NAME` 覆蓋 pool 名稱。
+
 每個 board 分別指定 U-Boot 階段與 FreeBSD 階段使用的 DTB：
 
 ```sh
@@ -276,6 +286,9 @@ env FIRMWARE_MIB=32 ./make-nanopc-t6-freebsd14-image.sh
 env SWAP_SIZE_MIB=0 ./make-nanopc-t6-freebsd14-image.sh
 ```
 
+這同時適用於 UFS 與 ZFS；腳本會設定 `growfs_swap_size="0"`，避免
+first boot 的 `growfs` 自動補建 swap。
+
 對應 layout：
 
 ```text
@@ -318,5 +331,5 @@ sync
 2. HDMI 在 U-Boot menu 前顯示 logo。
 3. U-Boot menu 倒數為 3 秒。
 4. FreeBSD loader menu 可由 HDMI 與 UART 顯示。
-5. FreeBSD 能掛載 `ufs:/dev/ufs/nanopc_t6_root`。
+5. FreeBSD 能掛載 UFS root，或 `zfs:nanopc_t6/ROOT/default`。
 6. `if_rge.ko` 載入且網路可用。

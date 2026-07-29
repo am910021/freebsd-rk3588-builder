@@ -11,7 +11,13 @@ BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
 
 STAMP=${STAMP:-$(date +%Y%m%d-%H%M%S)}
 LOGO_BMP=${LOGO_BMP:-${IMAGE_LOGO_BMP}}
-OUT=${OUT:-${IMAGE_OUTPUT_DIR}/nanopc-t6-lts-freebsd14.3-r26-${STAMP}.img}
+ROOTFS_TYPE=${ROOTFS_TYPE:-ufs}
+ZFS_POOL_NAME=${ZFS_POOL_NAME:-nanopc_t6}
+ROOTFS_SUFFIX=
+if [ "${ROOTFS_TYPE}" = "zfs" ]; then
+	ROOTFS_SUFFIX=-zfs
+fi
+OUT=${OUT:-${IMAGE_OUTPUT_DIR}/nanopc-t6-lts-freebsd14.3${ROOTFS_SUFFIX}-r26-${STAMP}.img}
 WORK=${WORK:-}
 
 usage()
@@ -55,6 +61,15 @@ case "${FIRMWARE_MIB}" in
 esac
 case "${SWAP_SIZE_MIB}" in
 	''|*[!0-9]*) die "swap size must be a non-negative integer" ;;
+esac
+case "${ROOTFS_TYPE}" in
+	ufs|zfs) ;;
+	*) die "root filesystem must be ufs or zfs" ;;
+esac
+case "${ZFS_POOL_NAME}" in
+	''|[!A-Za-z]*|*[!A-Za-z0-9_-]*)
+		die "invalid ZFS pool name: ${ZFS_POOL_NAME}"
+		;;
 esac
 
 SECTORS_PER_MIB=2048
@@ -103,6 +118,7 @@ cleanup()
 		mdconfig -d -u "${md#md}" >/dev/null 2>&1 || true
 	fi
 	if [ "${AUTO_WORK}" = "1" ]; then
+		chflags -R noschg,nouchg "${WORK}" >/dev/null 2>&1 || true
 		rm -rf "${WORK}"
 	fi
 }
@@ -114,10 +130,16 @@ for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${RGE_TXZ}" "${UBOOT_BIN}" \
 done
 [ ! -e "${OUT}" ] || die "output already exists: ${OUT}"
 
-for cmd in mdconfig gpart newfs newfs_msdos mount umount tar \
+for cmd in mdconfig gpart newfs newfs_msdos mount umount tar chflags \
     truncate dd mktemp sha256 mkimage python3 fsck_msdosfs fsck_ufs; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
+if [ "${ROOTFS_TYPE}" = "zfs" ]; then
+	for cmd in makefs zdb; do
+		command -v "${cmd}" >/dev/null 2>&1 ||
+		    die "missing command: ${cmd}"
+	done
+fi
 
 if [ -z "${WORK}" ]; then
 	mkdir -p "${WORK_ROOT}/tmp"
@@ -145,12 +167,14 @@ if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
 	gpart add -b "${SWAP_START}" -s "${SWAP_SECTORS}" -t freebsd-swap \
 	    -l growfs_swap "${md}"
 fi
-gpart add -b "${ROOT_START}" -s "${ROOT_SECTORS}" -t freebsd-ufs \
+gpart add -b "${ROOT_START}" -s "${ROOT_SECTORS}" -t "freebsd-${ROOTFS_TYPE}" \
     -l freebsd_root "${md}"
 
 echo "== Installing FreeBSD 14.3 root filesystem =="
-newfs -U -L "${ROOT_LABEL}" "/dev/${md}p${ROOT_PARTITION}" >/dev/null
-mount "/dev/${md}p${ROOT_PARTITION}" "${root_mnt}"
+if [ "${ROOTFS_TYPE}" = "ufs" ]; then
+	newfs -U -L "${ROOT_LABEL}" "/dev/${md}p${ROOT_PARTITION}" >/dev/null
+	mount "/dev/${md}p${ROOT_PARTITION}" "${root_mnt}"
+fi
 tar -xpf "${BASE_TXZ}" -C "${root_mnt}"
 tar -xpf "${KERNEL_TXZ}" -C "${root_mnt}"
 tar -xpf "${RGE_TXZ}" -C "${root_mnt}"
@@ -165,8 +189,14 @@ mkdir -p "${root_mnt}/boot/efi" "${root_mnt}/tmp" \
     "${root_mnt}/var/log" "${root_mnt}/var/tmp"
 touch "${root_mnt}/firstboot"
 
-cat > "${root_mnt}/etc/fstab" <<'EOF'
+if [ "${ROOTFS_TYPE}" = "ufs" ]; then
+	cat > "${root_mnt}/etc/fstab" <<'EOF'
 /dev/ufs/nanopc_t6_root	/		ufs	rw,noatime		1 1
+EOF
+else
+	: > "${root_mnt}/etc/fstab"
+fi
+cat >> "${root_mnt}/etc/fstab" <<'EOF'
 /dev/msdosfs/EFI		/boot/efi	msdosfs	rw,noatime,noauto	0 0
 EOF
 if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
@@ -191,6 +221,12 @@ sendmail_submit_enable="NO"
 sendmail_outbound_enable="NO"
 sendmail_msp_queue_enable="NO"
 EOF
+if [ "${SWAP_SIZE_MIB}" -eq 0 ]; then
+	echo 'growfs_swap_size="0"' >> "${root_mnt}/etc/rc.conf"
+fi
+if [ "${ROOTFS_TYPE}" = "zfs" ]; then
+	echo 'zfs_enable="YES"' >> "${root_mnt}/etc/rc.conf"
+fi
 
 cat > "${root_mnt}/boot/loader.conf" <<'EOF'
 boot_multicons="YES"
@@ -206,6 +242,13 @@ kern.msgbufsize="1048576"
 if_rge_load="YES"
 if_rge_name="/boot/modules/if_rge.ko"
 EOF
+if [ "${ROOTFS_TYPE}" = "zfs" ]; then
+	cat >> "${root_mnt}/boot/loader.conf" <<EOF
+kern.geom.label.disk_ident.enable="0"
+zfs_load="YES"
+vfs.root.mountfrom="zfs:${ZFS_POOL_NAME}/ROOT/default"
+EOF
+fi
 
 base_sha=$(sha256 -q "${BASE_TXZ}")
 kernel_sha=$(sha256 -q "${KERNEL_TXZ}")
@@ -228,12 +271,27 @@ idbloader.img: ${idb_sha}
 u-boot.itb: ${uboot_sha}
 FreeBSD DTB: ${dtb_sha}
 logo.bmp: ${logo_sha}
+Root filesystem: ${ROOTFS_TYPE}
 EOF
 
 sync
-df -h "${root_mnt}"
-umount "${root_mnt}"
-root_mnt=
+if [ "${ROOTFS_TYPE}" = "ufs" ]; then
+	df -h "${root_mnt}"
+	umount "${root_mnt}"
+	root_mnt=
+else
+	du -sh "${root_mnt}"
+	zfs_image="${WORK}/root.zfs"
+	makefs -t zfs -s $((ROOT_SIZE_MIB * 1024 * 1024)) \
+	    -o ashift=12 -o poolname="${ZFS_POOL_NAME}" \
+	    -o bootfs="${ZFS_POOL_NAME}/ROOT/default" -o rootpath=/ \
+	    -o fs="${ZFS_POOL_NAME};mountpoint=none" \
+	    -o fs="${ZFS_POOL_NAME}/ROOT;mountpoint=none" \
+	    -o fs="${ZFS_POOL_NAME}/ROOT/default;mountpoint=/;canmount=noauto" \
+	    "${zfs_image}" "${root_mnt}"
+	dd if="${zfs_image}" of="/dev/${md}p${ROOT_PARTITION}" \
+	    bs=1m conv=sync status=none
+fi
 
 echo "== Installing ESP =="
 newfs_msdos -L EFI -F 16 "/dev/${md}p1" >/dev/null
@@ -242,8 +300,10 @@ mkdir -p "${esp_mnt}/EFI/BOOT" "${esp_mnt}/EFI/FreeBSD" \
     "${esp_mnt}/EFI/overlays" "${esp_mnt}/dtb"
 
 loader_tmp="${WORK}/loader.efi"
-root_mnt="${WORK}/root"
-mount -o ro "/dev/${md}p${ROOT_PARTITION}" "${root_mnt}"
+if [ "${ROOTFS_TYPE}" = "ufs" ]; then
+	root_mnt="${WORK}/root"
+	mount -o ro "/dev/${md}p${ROOT_PARTITION}" "${root_mnt}"
+fi
 [ -e "${root_mnt}/firstboot" ] || die "missing firstboot sentinel"
 cp -p "${root_mnt}/boot/loader.efi" "${loader_tmp}"
 for overlay in ${UBOOT_FDT_OVERLAYS}; do
@@ -258,8 +318,10 @@ for overlay in ${UBOOT_FDT_OVERLAYS}; do
 	[ -f "${overlay_src}" ] || die "missing overlay: ${overlay_src}"
 	cp -p "${overlay_src}" "${esp_mnt}/EFI/overlays/${overlay}"
 done
-umount "${root_mnt}"
-root_mnt=
+if [ "${ROOTFS_TYPE}" = "ufs" ]; then
+	umount "${root_mnt}"
+	root_mnt=
+fi
 
 printf 'fdt_overlays=%s\n' "${UBOOT_FDT_OVERLAYS}" \
     > "${esp_mnt}/EFI/overlays.conf"
@@ -278,7 +340,11 @@ esp_mnt=
 echo "== Verifying image =="
 gpart show -p "${md}"
 fsck_msdosfs -n "/dev/${md}p1"
-fsck_ufs -n "/dev/${md}p${ROOT_PARTITION}"
+if [ "${ROOTFS_TYPE}" = "ufs" ]; then
+	fsck_ufs -n "/dev/${md}p${ROOT_PARTITION}"
+else
+	zdb -l "/dev/${md}p${ROOT_PARTITION}" >/dev/null
+fi
 mkimage -l "${DUALBOOT_SCR}" >/dev/null
 
 python3 - "${OUT}" "${UBOOT_BIN}" <<'PY'
@@ -303,7 +369,7 @@ cat > "${OUT}.build-info.txt" <<EOF
 Image: ${OUT}
 SHA256: ${image_sha}
 FreeBSD source commit: ${src_commit}
-Root label: ${ROOT_LABEL}
+Root filesystem: ${ROOTFS_TYPE}
 U-Boot: ${UBOOT_DIR}
 U-Boot firmware: ${UBOOT_BIN}
 U-Boot firmware SHA256: ${firmware_sha}
@@ -318,11 +384,11 @@ EOF
 if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
 	cat >> "${OUT}.build-info.txt" <<EOF
   p2 swap:       ${ESP_END_MIB}-${SWAP_END_MIB} MiB
-  p3 UFS root:   ${SWAP_END_MIB}-${ROOT_END_MIB} MiB
+  p3 ${ROOTFS_TYPE} root:   ${SWAP_END_MIB}-${ROOT_END_MIB} MiB
 EOF
 else
 	cat >> "${OUT}.build-info.txt" <<EOF
-  p2 UFS root:   ${ESP_END_MIB}-${ROOT_END_MIB} MiB
+  p2 ${ROOTFS_TYPE} root:   ${ESP_END_MIB}-${ROOT_END_MIB} MiB
 EOF
 fi
 cat >> "${OUT}.build-info.txt" <<EOF
