@@ -15,8 +15,7 @@ freebsd-rk3588-builder/
 ├── boards/                         board 專屬設定、DTB、menu 與檔案覆蓋
 ├── dtb/                            相容用的共用 DTB
 ├── output/                         可交付產物
-│   ├── img/
-│   └── txz/
+│   └── 14.3-p16/                   image、txz 與 checksum
 ├── src/
 │   ├── devicetree-rebasing/
 │   ├── freebsd-src/
@@ -91,9 +90,9 @@ cd /root/freebsd-rk3588-builder
 建立完整 image 前需要：
 
 ```text
-output/txz/base.txz
-output/txz/kernel.txz
-output/txz/if_rge.txz
+output/14.3-p16/base.txz
+output/14.3-p16/kernel.txz
+output/14.3-p16/if_rge.txz
 work/uboot-latest/
 ```
 
@@ -133,8 +132,8 @@ cd /root/freebsd-rk3588-builder
 輸出：
 
 ```text
-output/txz/base.txz
-output/txz/kernel.txz
+output/<FreeBSD 版本>/base.txz
+output/<FreeBSD 版本>/kernel.txz
 ```
 
 ## 建立 U-Boot
@@ -229,8 +228,8 @@ NanoPC-T6-SD-FULL-R26-BOOTMENU-3S-LOGOFIX1
 
 ```text
 work/if_rge_freebsd/if_rge.ko
-output/txz/if_rge-<commit>-freebsd14.3-p16-arm64.txz
-output/txz/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
+output/14.3-p16/if_rge-<commit>-freebsd14.3-p16-arm64.txz
+output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
 ```
 
 ## 建立 FreeBSD image
@@ -245,10 +244,10 @@ output/txz/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
 
 ```sh
 ./make-nanopc-t6-freebsd14-image.sh \
-    output/txz/base.txz \
-    output/txz/kernel.txz \
-    output/txz/if_rge.txz \
-    output/img/nanopc-t6-lts-freebsd14.3.img
+    output/14.3-p16/base.txz \
+    output/14.3-p16/kernel.txz \
+    output/14.3-p16/if_rge.txz \
+    output/14.3-p16/nanopc-t6-lts-freebsd14.3.img
 ```
 
 使用 32 MiB U-Boot 時，兩個階段必須使用相同設定：
@@ -291,7 +290,7 @@ Image 內會安裝：
 寫入前必須再次確認目標裝置名稱；這個動作會覆蓋整個裝置：
 
 ```sh
-dd if=output/img/<image>.img of=/dev/daX bs=1m conv=sync status=progress
+dd if=output/<FreeBSD 版本>/<image>.img of=/dev/daX bs=1m conv=sync status=progress
 sync
 ```
 
