@@ -31,6 +31,18 @@ fail()
 	exit 1
 }
 
+case "${UBOOT_LOGO_ENABLE}" in
+	YES)
+		LOGO_CONFIG=--enable
+		;;
+	NO)
+		LOGO_CONFIG=--disable
+		;;
+	*)
+		fail "UBOOT_LOGO_ENABLE must be YES or NO"
+		;;
+esac
+
 for file in "${UBOOT_BL31}" "${UBOOT_ROCKCHIP_TPL}" "${MENU_CMD}" \
     "${LOGO_BMP}"; do
 	[ -f "${file}" ] || fail "missing input: ${file}"
@@ -76,6 +88,8 @@ gmake -C "${UBOOT_SRC_DIR}" O="${BUILD_DIR}" \
     CROSS_COMPILE="${CROSS_COMPILE}" nanopc-t6-rk3588_defconfig
 "${UBOOT_SRC_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
     --disable TOOLS_MKEFICAPSULE
+"${UBOOT_SRC_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
+    "${LOGO_CONFIG}" NANOPC_T6_SHOW_LOGO
 gmake -C "${UBOOT_SRC_DIR}" O="${BUILD_DIR}" \
     CROSS_COMPILE="${CROSS_COMPILE}" olddefconfig
 gmake -C "${UBOOT_SRC_DIR}" O="${BUILD_DIR}" \
@@ -99,12 +113,13 @@ cp -p "${MENU_CMD}" "${OUT}/dualboot.cmd"
     -n "NanoPC-T6 FreeBSD14 U-Boot 2026.07 menu 3s" \
     -d "${OUT}/dualboot.cmd" "${OUT}/dualboot.scr" >/dev/null
 
-python3 - "${OUT}" "${FIRMWARE_MIB}" <<'PY'
+python3 - "${OUT}" "${FIRMWARE_MIB}" "${UBOOT_LOGO_ENABLE}" <<'PY'
 from pathlib import Path
 import sys
 
 out = Path(sys.argv[1])
 size_mib = int(sys.argv[2])
+logo_enable = b"1" if sys.argv[3] == "YES" else b"0"
 mib = 1024 * 1024
 sector = 512
 idb_offset = 0x40 * sector
@@ -120,7 +135,7 @@ binary = (out / "u-boot.bin").read_bytes()
 for marker in (
     b"NanoPC-T6-LTS-2026.07",
     b"bootmenu_delay=3",
-    b"logo_enable=1",
+    b"logo_enable=" + logo_enable,
     b"show_logo=",
     b"boot_freebsd=",
     b"rk_boot_storage",
@@ -181,6 +196,7 @@ Rockchip TPL: ${UBOOT_ROCKCHIP_TPL}
 Cross compile: ${CROSS_COMPILE}
 Jobs: ${JOBS}
 Logo: ${LOGO_BMP}
+Logo enabled: ${UBOOT_LOGO_ENABLE}
 ESP menu: ${MENU_CMD}
 Firmware image: nanopc-t6-lts-uboot-${FIRMWARE_MIB}m.bin
 Firmware size: ${FIRMWARE_MIB} MiB
