@@ -120,6 +120,7 @@ binary = (out / "u-boot.bin").read_bytes()
 for marker in (
     b"NanoPC-T6-LTS-2026.07",
     b"bootmenu_delay=3",
+    b"logo_enable=1",
     b"show_logo=",
     b"boot_freebsd=",
     b"rk_boot_storage",
