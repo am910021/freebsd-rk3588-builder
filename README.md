@@ -257,7 +257,7 @@ output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
 
 ```sh
 ./build-vendor2017-r26-complete.sh 32
-FIRMWARE_MIB=32 ./make-nanopc-t6-freebsd14-image.sh
+env FIRMWARE_MIB=32 ./make-nanopc-t6-freebsd14-image.sh
 ```
 
 預設 image layout：
@@ -273,7 +273,7 @@ FIRMWARE_MIB=32 ./make-nanopc-t6-freebsd14-image.sh
 不建立 swap：
 
 ```sh
-SWAP_SIZE_MIB=0 ./make-nanopc-t6-freebsd14-image.sh
+env SWAP_SIZE_MIB=0 ./make-nanopc-t6-freebsd14-image.sh
 ```
 
 對應 layout：
