@@ -122,6 +122,8 @@ for marker in (
     b"bootmenu_delay=3",
     b"show_logo=",
     b"boot_freebsd=",
+    b"rk_boot_storage",
+    b"rockchip,boot-storage",
 ):
     if marker not in binary:
         raise SystemExit(f"u-boot.bin lacks marker: {marker!r}")
