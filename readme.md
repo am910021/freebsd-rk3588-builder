@@ -10,6 +10,55 @@ Build the following for RK3588 SBCs on a FreeBSD amd64 host:
 
 The currently supported board is `nanopc-t6-lts`.
 
+## Required Build Order
+
+Run the following steps in order. Changing the order can produce an incomplete
+or inconsistent image.
+
+1. Clone the builder and enter its directory:
+
+   ```sh
+   git clone https://github.com/am910021/freebsd-rk3588-builder.git
+   cd freebsd-rk3588-builder
+   ```
+
+2. Select the board. Edit `builder.conf` only when other settings need to be
+   customized:
+
+   ```sh
+   export BOARD=nanopc-t6-lts
+   ```
+
+3. Fetch or update all source repositories:
+
+   ```sh
+   ./checkout.sh
+   ```
+
+4. Build the complete U-Boot firmware bundle:
+
+   ```sh
+   ./build-u-boot-2026.07-complete.sh
+   ```
+
+5. Build the FreeBSD base and kernel archives:
+
+   ```sh
+   ./build-freebsd-release.sh
+   ```
+
+6. Build the `if_rge` kernel module package:
+
+   ```sh
+   ./build-if-rge-freebsd.sh
+   ```
+
+7. Assemble the final FreeBSD image:
+
+   ```sh
+   ./make-freebsd14-image.sh
+   ```
+
 ## Directory Layout
 
 ```text
@@ -123,11 +172,7 @@ work/uboot-latest/
 ```
 
 `base.txz` and `kernel.txz` come from the current FreeBSD arm64 release build.
-Build them with the builder source and object directories:
-
-```sh
-./build-freebsd-release.sh
-```
+They are produced by step 5 using the builder source and object directories.
 
 Default paths:
 
@@ -141,26 +186,6 @@ KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 
 `build-if-rge-freebsd.sh` directly uses the same kernel objects and arm64
 toolchain.
-
-## Building FreeBSD Base and Kernel
-
-```sh
-cd /root/freebsd-rk3588-builder
-./build-freebsd-release.sh
-```
-
-The script uses:
-
-- `src/freebsd-src`
-- `work/obj/<FreeBSD version>/arm64.aarch64`
-- `FREEBSD_KERNCONF` from `boards/nanopc-t6-lts/board.conf`
-
-Output:
-
-```text
-output/<FreeBSD version>/base.txz
-output/<FreeBSD version>/kernel.txz
-```
 
 ## Building U-Boot
 
@@ -249,6 +274,26 @@ boot, and a built-in three-second U-Boot menu:
 NanoPC-T6-LTS-2026.07-R81-LOGO
 ```
 
+## Building FreeBSD Base and Kernel
+
+```sh
+cd /root/freebsd-rk3588-builder
+./build-freebsd-release.sh
+```
+
+The script uses:
+
+- `src/freebsd-src`
+- `work/obj/<FreeBSD version>/arm64.aarch64`
+- `FREEBSD_KERNCONF` from `boards/nanopc-t6-lts/board.conf`
+
+Output:
+
+```text
+output/<FreeBSD version>/base.txz
+output/<FreeBSD version>/kernel.txz
+```
+
 ## Building if_rge
 
 ```sh
@@ -282,12 +327,7 @@ Or explicitly specify the txz archives and output image:
 ```
 
 Both `build-u-boot-2026.07-complete.sh` and the image builder use
-`FIRMWARE_MIB` from `builder.conf`; it does not need to be passed separately:
-
-```sh
-./build-u-boot-2026.07-complete.sh
-./make-freebsd14-image.sh
-```
+`FIRMWARE_MIB` from `builder.conf`; it does not need to be passed separately.
 
 Default image layout:
 

@@ -8,6 +8,53 @@
 
 目前支援的 board 是 `nanopc-t6-lts`。
 
+## 必要建置順序
+
+必須依照以下順序執行。更改順序可能產生不完整或內容不一致的 image。
+
+1. Clone builder 並進入目錄：
+
+   ```sh
+   git clone https://github.com/am910021/freebsd-rk3588-builder.git
+   cd freebsd-rk3588-builder
+   ```
+
+2. 選擇 board。只有需要客製化其他參數時才修改 `builder.conf`：
+
+   ```sh
+   export BOARD=nanopc-t6-lts
+   ```
+
+3. 取得或更新所有 source repositories：
+
+   ```sh
+   ./checkout.sh
+   ```
+
+4. 建立完整 U-Boot firmware bundle：
+
+   ```sh
+   ./build-u-boot-2026.07-complete.sh
+   ```
+
+5. 建立 FreeBSD base 與 kernel：
+
+   ```sh
+   ./build-freebsd-release.sh
+   ```
+
+6. 建立 `if_rge` kernel module 套件：
+
+   ```sh
+   ./build-if-rge-freebsd.sh
+   ```
+
+7. 組合最終 FreeBSD image：
+
+   ```sh
+   ./make-freebsd14-image.sh
+   ```
+
 ## 目錄
 
 ```text
@@ -119,11 +166,7 @@ work/uboot-latest/
 ```
 
 `base.txz` 與 `kernel.txz` 由目前的 FreeBSD arm64 release build 產生。
-使用 builder 內的 source 與 object 目錄建立：
-
-```sh
-./build-freebsd-release.sh
-```
+它們會在步驟 5 使用 builder 內的 source 與 object 目錄建立。
 
 預設路徑：
 
@@ -137,26 +180,6 @@ KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 
 `build-if-rge-freebsd.sh` 會直接使用同一套 kernel object 與 arm64
 toolchain。
-
-## 建立 FreeBSD base 與 kernel
-
-```sh
-cd /root/freebsd-rk3588-builder
-./build-freebsd-release.sh
-```
-
-腳本使用：
-
-- `src/freebsd-src`
-- `work/obj/<FreeBSD 版本>/arm64.aarch64`
-- `boards/nanopc-t6-lts/board.conf` 的 `FREEBSD_KERNCONF`
-
-輸出：
-
-```text
-output/<FreeBSD 版本>/base.txz
-output/<FreeBSD 版本>/kernel.txz
-```
 
 ## 建立 U-Boot
 
@@ -243,6 +266,26 @@ v1.18。更新 rkbin 後必須重新進行冷開機測試。
 NanoPC-T6-LTS-2026.07-R81-LOGO
 ```
 
+## 建立 FreeBSD base 與 kernel
+
+```sh
+cd /root/freebsd-rk3588-builder
+./build-freebsd-release.sh
+```
+
+腳本使用：
+
+- `src/freebsd-src`
+- `work/obj/<FreeBSD 版本>/arm64.aarch64`
+- `boards/nanopc-t6-lts/board.conf` 的 `FREEBSD_KERNCONF`
+
+輸出：
+
+```text
+output/<FreeBSD 版本>/base.txz
+output/<FreeBSD 版本>/kernel.txz
+```
+
 ## 建立 if_rge
 
 ```sh
@@ -276,12 +319,7 @@ output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
 ```
 
 `build-u-boot-2026.07-complete.sh` 與 image builder 都使用
-`builder.conf` 的 `FIRMWARE_MIB`，不需分別傳入：
-
-```sh
-./build-u-boot-2026.07-complete.sh
-./make-freebsd14-image.sh
-```
+`builder.conf` 的 `FIRMWARE_MIB`，不需分別傳入。
 
 預設 image layout：
 
