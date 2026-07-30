@@ -1,10 +1,10 @@
 # FreeBSD RK3588 Image Builder
 
-在 FreeBSD amd64 主機上建立 NanoPC-T6 LTS 使用的：
+在 FreeBSD amd64 主機上建立 RK3588 SBC 使用的：
 
-- U-Boot 2026.07 for NanoPC-T6 LTS
+- U-Boot 2026.07
 - `if_rge.ko` kernel module 套件
-- FreeBSD 14.3 arm64 SD card image
+- FreeBSD arm64 SD card image
 
 目前支援的 board 是 `nanopc-t6-lts`。
 
@@ -29,7 +29,7 @@ freebsd-rk3588-builder/
 ├── build-freebsd-release.sh        建立 FreeBSD base.txz 與 kernel.txz
 ├── build-u-boot-2026.07-complete.sh
 ├── build-if-rge-freebsd.sh
-└── make-nanopc-t6-freebsd14-image.sh
+└── make-freebsd14-image.sh
 ```
 
 `src/`、`work/` 與 `output/` 不納入 builder Git repository。
@@ -45,7 +45,7 @@ boards/nanopc-t6-lts/board.conf
 所有設定都可以用環境變數覆蓋。常用項目：
 
 ```sh
-BOARD=nanopc-t6-lts
+export BOARD=nanopc-t6-lts
 FIRMWARE_MIB=16
 ESP_SIZE_MIB=256
 SWAP_SIZE_MIB=512
@@ -54,6 +54,9 @@ IMAGE_TAIL_MIB=96
 JOBS=16
 ```
 
+`builder.conf` 不提供預設 board。未設定 `BOARD` 時，U-Boot 與 image
+建置腳本會直接終止。以下 board 建置範例均假設已執行上述 `export`。
+
 設定 `SWAP_SIZE_MIB=0` 時不建立 swap partition，root filesystem 會成為
 `p2`；大於零時維持 `p2` swap、`p3` root。
 
@@ -61,10 +64,10 @@ Root filesystem 預設為 UFS。建立 ZFS root image 時建議至少配置 2 Gi
 
 ```sh
 env ROOTFS_TYPE=zfs ROOT_SIZE_MIB=2048 \
-    ./make-nanopc-t6-freebsd14-image.sh
+    ./make-freebsd14-image.sh
 ```
 
-ZFS pool 預設為 `nanopc_t6`，bootfs 為
+NanoPC-T6 LTS 的 board 設定將 ZFS pool 設為 `nanopc_t6`，bootfs 為
 `nanopc_t6/ROOT/default`。可以用 `ZFS_POOL_NAME` 覆蓋 pool 名稱。
 
 每個 board 指定衍生自 U-Boot upstream DTS 的 FreeBSD DTS：
@@ -94,11 +97,12 @@ RKBIN_COMMIT=
 
 ```sh
 cd /root/freebsd-rk3588-builder
-./checkout.sh
+BOARD=nanopc-t6-lts ./checkout.sh
 ```
 
 如果任何既有 source repository 有未提交修改，`checkout.sh` 會在更新
-任何 repository 前終止。
+任何 repository 前終止。未選擇 board 且未設定 `UBOOT_BRANCH` 或
+`UBOOT_COMMIT` 時，只會跳過 U-Boot repository。
 
 ## 輸入檔案
 
@@ -169,7 +173,7 @@ FIRMWARE_MIB=32
 輸出：
 
 ```text
-work/uboot-2026.07-16m/
+work/nanopc-t6-lts-uboot-2026.07-16m/
 ├── idbloader.img
 ├── u-boot.itb
 ├── uboot-control.dtb
@@ -255,13 +259,13 @@ output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
 使用 `builder.conf` 的預設輸入：
 
 ```sh
-./make-nanopc-t6-freebsd14-image.sh
+./make-freebsd14-image.sh
 ```
 
 或明確指定 txz 與輸出檔：
 
 ```sh
-./make-nanopc-t6-freebsd14-image.sh \
+./make-freebsd14-image.sh \
     output/14.3-p16/base.txz \
     output/14.3-p16/kernel.txz \
     output/14.3-p16/if_rge.txz \
@@ -273,7 +277,7 @@ output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
 
 ```sh
 ./build-u-boot-2026.07-complete.sh
-./make-nanopc-t6-freebsd14-image.sh
+./make-freebsd14-image.sh
 ```
 
 預設 image layout：
@@ -289,7 +293,7 @@ output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
 不建立 swap：
 
 ```sh
-env SWAP_SIZE_MIB=0 ./make-nanopc-t6-freebsd14-image.sh
+env SWAP_SIZE_MIB=0 ./make-freebsd14-image.sh
 ```
 
 這同時適用於 UFS 與 ZFS；腳本會設定 `growfs_swap_size="0"`，避免

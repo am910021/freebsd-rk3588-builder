@@ -9,6 +9,10 @@ BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
 }
 . "${BUILDER_CONFIG}"
 
+[ -n "${BOARD}" ] || {
+	echo "${0##*/}: BOARD is required" >&2
+	exit 1
+}
 [ "$#" -eq 0 ] || {
 	echo "usage: ${0##*/}" >&2
 	exit 1
@@ -21,7 +25,7 @@ case "${FIRMWARE_MIB}" in
 		;;
 esac
 
-FINAL_OUT=${WORK_ROOT}/uboot-2026.07-${FIRMWARE_MIB}m
+FINAL_OUT=${WORK_ROOT}/${BOARD}-uboot-${UBOOT_VERSION}-${FIRMWARE_MIB}m
 WORK=${WORK:-}
 LOGO_BMP=${LOGO_BMP:-${UBOOT_LOGO_BMP}}
 
@@ -47,6 +51,12 @@ for file in "${UBOOT_BL31}" "${UBOOT_ROCKCHIP_TPL}" "${MENU_CMD}" \
     "${LOGO_BMP}" "${FREEBSD_DTS}"; do
 	[ -f "${file}" ] || fail "missing input: ${file}"
 done
+[ -n "${UBOOT_BRANCH}${UBOOT_COMMIT}" ] ||
+    fail "UBOOT_BRANCH or UBOOT_COMMIT is not configured"
+[ -n "${UBOOT_DEFCONFIG}" ] || fail "UBOOT_DEFCONFIG is not configured"
+[ -n "${UBOOT_LOGO_CONFIG}" ] || fail "UBOOT_LOGO_CONFIG is not configured"
+[ -n "${UBOOT_BINARY_MARKER}" ] ||
+    fail "UBOOT_BINARY_MARKER is not configured"
 [ -d "${UBOOT_SRC_DIR}" ] || fail "missing source: ${UBOOT_SRC_DIR}"
 [ -x "${MKIMAGE}" ] || fail "not executable: ${MKIMAGE}"
 for cmd in git gmake mktemp python3 sha256; do
@@ -55,10 +65,17 @@ done
 command -v "${CROSS_COMPILE}gcc" >/dev/null 2>&1 ||
     fail "missing compiler: ${CROSS_COMPILE}gcc"
 
-SOURCE_BRANCH=$(git -C "${UBOOT_SRC_DIR}" symbolic-ref --short HEAD)
 SOURCE_COMMIT=$(git -C "${UBOOT_SRC_DIR}" rev-parse HEAD)
-[ "${SOURCE_BRANCH}" = "${UBOOT_BRANCH}" ] ||
-    fail "unexpected source branch: ${SOURCE_BRANCH}"
+SOURCE_BRANCH=$(git -C "${UBOOT_SRC_DIR}" symbolic-ref --short HEAD \
+    2>/dev/null || echo detached)
+if [ -n "${UBOOT_COMMIT}" ]; then
+	EXPECTED_COMMIT=$(git -C "${UBOOT_SRC_DIR}" rev-parse \
+	    "${UBOOT_COMMIT}^{commit}")
+	[ "${SOURCE_COMMIT}" = "${EXPECTED_COMMIT}" ] ||
+	    fail "unexpected source commit: ${SOURCE_COMMIT}"
+elif [ "${SOURCE_BRANCH}" != "${UBOOT_BRANCH}" ]; then
+	fail "unexpected source branch: ${SOURCE_BRANCH}"
+fi
 [ -z "$(git -C "${UBOOT_SRC_DIR}" status --porcelain)" ] ||
     fail "source tree is not clean: ${UBOOT_SRC_DIR}"
 
@@ -66,7 +83,7 @@ mkdir -p "${WORK_ROOT}/tmp"
 AUTO_WORK=0
 STAGING_OUT=
 if [ -z "${WORK}" ]; then
-	WORK=$(mktemp -d "${WORK_ROOT}/tmp/nanopc-t6-uboot.XXXXXX")
+	WORK=$(mktemp -d "${WORK_ROOT}/tmp/${BOARD}-uboot.XXXXXX")
 	AUTO_WORK=1
 else
 	[ ! -e "${WORK}" ] || fail "work directory already exists: ${WORK}"
@@ -80,16 +97,16 @@ cleanup()
 trap cleanup EXIT INT TERM
 
 STAGING_OUT=$(mktemp -d \
-    "${WORK_ROOT}/tmp/uboot-2026.07-${FIRMWARE_MIB}m.XXXXXX")
+    "${WORK_ROOT}/tmp/${BOARD}-uboot-${UBOOT_VERSION}-${FIRMWARE_MIB}m.XXXXXX")
 OUT=${STAGING_OUT}
 BUILD_DIR=${WORK}/build
 
 gmake -C "${UBOOT_SRC_DIR}" O="${BUILD_DIR}" \
-    CROSS_COMPILE="${CROSS_COMPILE}" nanopc-t6-rk3588_defconfig
+    CROSS_COMPILE="${CROSS_COMPILE}" "${UBOOT_DEFCONFIG}"
 "${UBOOT_SRC_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
     --disable TOOLS_MKEFICAPSULE
 "${UBOOT_SRC_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
-    "${LOGO_CONFIG}" NANOPC_T6_SHOW_LOGO
+    "${LOGO_CONFIG}" "${UBOOT_LOGO_CONFIG}"
 gmake -C "${UBOOT_SRC_DIR}" O="${BUILD_DIR}" \
     CROSS_COMPILE="${CROSS_COMPILE}" olddefconfig
 gmake -C "${UBOOT_SRC_DIR}" O="${BUILD_DIR}" \
@@ -102,7 +119,7 @@ for file in idbloader.img u-boot.itb u-boot.bin u-boot.dtb .config; do
 	    fail "build did not produce: ${file}"
 done
 
-FREEBSD_DTS_PP=${WORK}/rk3588-nanopc-t6-lts-freebsd.pp.dts
+FREEBSD_DTS_PP=${WORK}/${BOARD}-freebsd.pp.dts
 "${CROSS_COMPILE}gcc" -E -nostdinc -undef -D__DTS__ \
     -x assembler-with-cpp \
     -I"${UBOOT_SRC_DIR}/dts/upstream/src/arm64/rockchip" \
@@ -121,16 +138,19 @@ cp -p "${BUILD_DIR}/.config" "${OUT}/u-boot.config"
 cp -p "${LOGO_BMP}" "${OUT}/logo.bmp"
 cp -p "${MENU_CMD}" "${OUT}/dualboot.cmd"
 "${MKIMAGE}" -A arm -T script -C none \
-    -n "NanoPC-T6 FreeBSD14 U-Boot 2026.07 menu 3s" \
+    -n "${BOARD} FreeBSD U-Boot ${UBOOT_VERSION} menu" \
     -d "${OUT}/dualboot.cmd" "${OUT}/dualboot.scr" >/dev/null
 
-python3 - "${OUT}" "${FIRMWARE_MIB}" "${UBOOT_LOGO_ENABLE}" <<'PY'
+python3 - "${OUT}" "${FIRMWARE_MIB}" "${UBOOT_LOGO_ENABLE}" \
+    "${BOARD}" "${UBOOT_BINARY_MARKER}" <<'PY'
 from pathlib import Path
 import sys
 
 out = Path(sys.argv[1])
 size_mib = int(sys.argv[2])
 logo_enable = b"1" if sys.argv[3] == "YES" else b"0"
+board = sys.argv[4]
+binary_marker = sys.argv[5].encode()
 mib = 1024 * 1024
 sector = 512
 idb_offset = 0x40 * sector
@@ -144,7 +164,7 @@ if len(script) < 72 or script[68:72] != b"\0\0\0\0":
 
 binary = (out / "u-boot.bin").read_bytes()
 for marker in (
-    b"NanoPC-T6-LTS-2026.07",
+    binary_marker,
     b"bootmenu_delay=3",
     b"logo_enable=" + logo_enable,
     b"show_logo=",
@@ -183,7 +203,7 @@ firmware = bytearray(b"\xff") * (size_mib * mib)
 for _, offset, data, _ in limits:
     firmware[offset:offset + len(data)] = data
 
-firmware_name = f"nanopc-t6-lts-uboot-{size_mib}m.bin"
+firmware_name = f"{board}-uboot-{size_mib}m.bin"
 (out / firmware_name).write_bytes(firmware)
 (out / "logo.img").write_bytes(logo_raw)
 (out / "FIRMWARE-LAYOUT.txt").write_text(
@@ -199,6 +219,7 @@ PY
 cat > "${OUT}/BUILD-INFO.txt" <<EOF
 Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 Builder root: ${BUILDER_ROOT}
+Board: ${BOARD}
 U-Boot source: ${UBOOT_SRC_DIR}
 Source branch: ${SOURCE_BRANCH}
 Source commit: ${SOURCE_COMMIT}
@@ -210,7 +231,7 @@ Logo: ${LOGO_BMP}
 Logo enabled: ${UBOOT_LOGO_ENABLE}
 ESP menu: ${MENU_CMD}
 FreeBSD DTS: ${FREEBSD_DTS}
-Firmware image: nanopc-t6-lts-uboot-${FIRMWARE_MIB}m.bin
+Firmware image: ${BOARD}-uboot-${FIRMWARE_MIB}m.bin
 Firmware size: ${FIRMWARE_MIB} MiB
 EOF
 
@@ -219,7 +240,7 @@ EOF
 	sha256 idbloader.img u-boot.itb u-boot.bin u-boot.config \
 	    uboot-control.dtb freebsd-runtime.dtb \
 	    logo.bmp logo.img dualboot.cmd dualboot.scr \
-	    nanopc-t6-lts-uboot-${FIRMWARE_MIB}m.bin \
+	    "${BOARD}-uboot-${FIRMWARE_MIB}m.bin" \
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt > SHA256SUMS
 )
 
@@ -233,8 +254,8 @@ STAGING_OUT=
 OUT=${FINAL_OUT}
 
 ln -sfn "${OUT}" "${WORK_ROOT}/uboot-latest"
-echo "== U-Boot 2026.07 complete bundle =="
+echo "== ${BOARD} U-Boot ${UBOOT_VERSION} complete bundle =="
 ls -lh "${OUT}/idbloader.img" "${OUT}/u-boot.itb" \
     "${OUT}/logo.img" \
-    "${OUT}/nanopc-t6-lts-uboot-${FIRMWARE_MIB}m.bin"
+    "${OUT}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin"
 echo "${OUT}"

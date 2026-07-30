@@ -9,15 +9,19 @@ BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
 }
 . "${BUILDER_CONFIG}"
 
+[ -n "${BOARD}" ] || {
+	echo "${0##*/}: BOARD is required" >&2
+	exit 1
+}
+
 STAMP=${STAMP:-$(date +%Y%m%d-%H%M%S)}
 LOGO_BMP=${LOGO_BMP:-${IMAGE_LOGO_BMP}}
 ROOTFS_TYPE=${ROOTFS_TYPE:-ufs}
-ZFS_POOL_NAME=${ZFS_POOL_NAME:-nanopc_t6}
 ROOTFS_SUFFIX=
 if [ "${ROOTFS_TYPE}" = "zfs" ]; then
 	ROOTFS_SUFFIX=-zfs
 fi
-OUT=${OUT:-${IMAGE_OUTPUT_DIR}/nanopc-t6-lts-freebsd14.3${ROOTFS_SUFFIX}-uboot2026.07-${STAMP}.img}
+OUT=${OUT:-${IMAGE_OUTPUT_DIR}/${BOARD}-freebsd${FREEBSD_OBJ_VERSION}${ROOTFS_SUFFIX}-uboot${UBOOT_VERSION}-${STAMP}.img}
 WORK=${WORK:-}
 
 usage()
@@ -42,12 +46,11 @@ case $# in
 	*) usage ;;
 esac
 
-UBOOT_BIN=${UBOOT_DIR}/nanopc-t6-lts-uboot-${FIRMWARE_MIB}m.bin
+UBOOT_BIN=${UBOOT_DIR}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin
 IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb
 DUALBOOT_CMD=${UBOOT_DIR}/dualboot.cmd
 DUALBOOT_SCR=${UBOOT_DIR}/dualboot.scr
-ROOT_LABEL=nanopc_t6_root
 
 die()
 {
@@ -55,6 +58,14 @@ die()
 	exit 1
 }
 
+[ -n "${ROOT_LABEL}" ] || die "ROOT_LABEL is not configured"
+[ -n "${IMAGE_HOSTNAME}" ] || die "IMAGE_HOSTNAME is not configured"
+[ -n "${FREEBSD_DTB_ESP_PATH}" ] ||
+    die "FREEBSD_DTB_ESP_PATH is not configured"
+case "${FREEBSD_DTB_ESP_PATH}" in
+	/*) ;;
+	*) die "FREEBSD_DTB_ESP_PATH must be absolute" ;;
+esac
 case "${FIRMWARE_MIB}" in
 	16|32) ;;
 	*) die "firmware size must be 16 or 32 MiB" ;;
@@ -143,7 +154,7 @@ fi
 
 if [ -z "${WORK}" ]; then
 	mkdir -p "${WORK_ROOT}/tmp"
-	WORK=$(mktemp -d "${WORK_ROOT}/tmp/nanopc-t6-image.XXXXXX")
+	WORK=$(mktemp -d "${WORK_ROOT}/tmp/${BOARD}-image.XXXXXX")
 	AUTO_WORK=1
 else
 	[ ! -e "${WORK}" ] || die "work directory already exists: ${WORK}"
@@ -158,7 +169,7 @@ mkdir -p "${root_mnt}" "${esp_mnt}"
 
 echo "== Creating GPT image =="
 truncate -s $((TOTAL_SECTORS * 512)) "${OUT}"
-echo "== Installing complete ${FIRMWARE_MIB} MiB U-Boot 2026.07 firmware =="
+echo "== Installing complete ${FIRMWARE_MIB} MiB U-Boot ${UBOOT_VERSION} firmware =="
 dd if="${UBOOT_BIN}" of="${OUT}" bs=1m conv=notrunc,sync status=none
 md=$(mdconfig -a -t vnode -f "${OUT}")
 gpart create -s gpt "${md}"
@@ -170,7 +181,7 @@ fi
 gpart add -b "${ROOT_START}" -s "${ROOT_SECTORS}" -t "freebsd-${ROOTFS_TYPE}" \
     -l freebsd_root "${md}"
 
-echo "== Installing FreeBSD 14.3 root filesystem =="
+echo "== Installing FreeBSD ${FREEBSD_OBJ_VERSION} root filesystem =="
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 	newfs -U -L "${ROOT_LABEL}" "/dev/${md}p${ROOT_PARTITION}" >/dev/null
 	mount "/dev/${md}p${ROOT_PARTITION}" "${root_mnt}"
@@ -190,9 +201,8 @@ mkdir -p "${root_mnt}/boot/efi" "${root_mnt}/tmp" \
 touch "${root_mnt}/firstboot"
 
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
-	cat > "${root_mnt}/etc/fstab" <<'EOF'
-/dev/ufs/nanopc_t6_root	/		ufs	rw,noatime		1 1
-EOF
+	printf '/dev/ufs/%s\t/\t\tufs\trw,noatime\t\t1 1\n' \
+	    "${ROOT_LABEL}" > "${root_mnt}/etc/fstab"
 else
 	: > "${root_mnt}/etc/fstab"
 fi
@@ -210,8 +220,8 @@ md				/var/log	mfs	rw,noatime,-s64m	0 0
 md				/var/tmp	mfs	rw,noatime,-s64m	0 0
 EOF
 
-cat > "${root_mnt}/etc/rc.conf" <<'EOF'
-hostname="nanopc-t6"
+cat > "${root_mnt}/etc/rc.conf" <<EOF
+hostname="${IMAGE_HOSTNAME}"
 ifconfig_DEFAULT="DHCP"
 sshd_enable="YES"
 growfs_enable="YES"
@@ -261,7 +271,8 @@ logo_sha=$(sha256 -q "${LOGO_BMP}")
 src_commit=$(git -C "${FREEBSD_SRC_DIR}" rev-parse --short HEAD 2>/dev/null ||
     echo unknown)
 
-cat > "${root_mnt}/etc/nanopc-t6-image-build.txt" <<EOF
+cat > "${root_mnt}/etc/${BOARD}-image-build.txt" <<EOF
+Board: ${BOARD}
 FreeBSD source commit: ${src_commit}
 base.txz: ${base_sha}
 kernel.txz: ${kernel_sha}
@@ -297,7 +308,8 @@ echo "== Installing ESP =="
 newfs_msdos -L EFI -F 16 "/dev/${md}p1" >/dev/null
 mount -t msdosfs "/dev/${md}p1" "${esp_mnt}"
 mkdir -p "${esp_mnt}/EFI/BOOT" "${esp_mnt}/EFI/FreeBSD" \
-    "${esp_mnt}/EFI/overlays" "${esp_mnt}/dtb"
+    "${esp_mnt}/EFI/overlays" \
+    "$(dirname "${esp_mnt}${FREEBSD_DTB_ESP_PATH}")"
 
 loader_tmp="${WORK}/loader.efi"
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
@@ -327,7 +339,7 @@ printf 'fdt_overlays=%s\n' "${UBOOT_FDT_OVERLAYS}" \
     > "${esp_mnt}/EFI/overlays.conf"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/BOOT/BOOTAA64.EFI"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/FreeBSD/loader.efi"
-cp -p "${FREEBSD_DTB}" "${esp_mnt}/dtb/rk3588-nanopc-t6.dtb"
+cp -p "${FREEBSD_DTB}" "${esp_mnt}${FREEBSD_DTB_ESP_PATH}"
 
 cp -p "${DUALBOOT_CMD}" "${esp_mnt}/dualboot.cmd"
 cp -p "${DUALBOOT_SCR}" "${esp_mnt}/dualboot.scr"
@@ -368,6 +380,7 @@ EOF
 cat > "${OUT}.build-info.txt" <<EOF
 Image: ${OUT}
 SHA256: ${image_sha}
+Board: ${BOARD}
 FreeBSD source commit: ${src_commit}
 Root filesystem: ${ROOTFS_TYPE}
 U-Boot: ${UBOOT_DIR}
