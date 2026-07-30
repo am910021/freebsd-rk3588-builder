@@ -1,4 +1,6 @@
 src/*
+!src/ports/
+!src/ports/**
 work/*
 output/*
 txz/*

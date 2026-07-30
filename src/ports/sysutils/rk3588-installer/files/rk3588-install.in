@@ -1,0 +1,461 @@
+#!/bin/sh
+#-
+# SPDX-License-Identifier: BSD-2-Clause
+#
+# Copyright (c) 2026 Fang, Wei-Xiang (Yuri) <am910021@gmail.com>
+#
+
+set -eu
+
+PAYLOAD=%%PREFIX%%/share/rk3588-installer
+BSDINSTALL_DISTDIR=${BSDINSTALL_DISTDIR:-/usr/freebsd-dist}
+BSDINSTALL_CHROOT=${BSDINSTALL_CHROOT:-/mnt}
+DISTRIBUTIONS=${DISTRIBUTIONS:-"base.txz kernel.txz"}
+
+die()
+{
+	echo "${0##*/}: $*" >&2
+	exit 1
+}
+
+is_uint()
+{
+	case "$1" in
+	''|*[!0-9]*) return 1 ;;
+	*) return 0 ;;
+	esac
+}
+
+read_config()
+{
+	[ -r "${PAYLOAD}/config" ] || die "missing ${PAYLOAD}/config"
+	. "${PAYLOAD}/config"
+
+	case "${FIRMWARE_MIB:-}" in
+	16|32) ;;
+	*) die "FIRMWARE_MIB must be 16 or 32" ;;
+	esac
+	is_uint "${ESP_MIB:-}" && [ "${ESP_MIB}" -gt 0 ] ||
+	    die "ESP_MIB must be a positive integer"
+	case "${ROOT_LABEL:-}" in
+	''|*[!A-Za-z0-9_-]*) die "invalid ROOT_LABEL" ;;
+	esac
+	case "${ZFS_POOL_NAME:-}" in
+	''|[!A-Za-z]*|*[!A-Za-z0-9_-]*)
+		die "invalid ZFS_POOL_NAME"
+		;;
+	esac
+}
+
+calculate_layout()
+{
+	reserve_sectors=$((FIRMWARE_MIB * 2048))
+	firmware_start=40
+	firmware_sectors=$((reserve_sectors - firmware_start))
+	esp_start=${reserve_sectors}
+	esp_sectors=$((ESP_MIB * 2048))
+	swap_start=$((esp_start + esp_sectors))
+	swap_sectors=$((SWAP_MIB * 2048))
+	root_start=$((swap_start + swap_sectors))
+	root_partition=3
+	[ "${SWAP_MIB}" -eq 0 ] || root_partition=4
+}
+
+mounted_provider()
+{
+	mount -p | awk -v path="$1" '$2 == path { print $1; exit }'
+}
+
+provider_disk()
+{
+	provider=${1#/dev/}
+	case "${provider}" in
+	mmcsd0|mmcsd0p*) echo mmcsd0; return ;;
+	mmcsd1|mmcsd1p*) echo mmcsd1; return ;;
+	esac
+
+	provider=$(geom label status -s |
+	    awk -v name="${provider}" '$1 == name { print $3; exit }')
+	case "${provider}" in
+	mmcsd0|mmcsd0p*) echo mmcsd0 ;;
+	mmcsd1|mmcsd1p*) echo mmcsd1 ;;
+	*) return 1 ;;
+	esac
+}
+
+boot_storage()
+{
+	hex=$(ofwdump -P rockchip,boot-storage /chosen |
+	    awk 'NF == 4 && $1 ~ /^[[:xdigit:]][[:xdigit:]]$/ {
+		print $4
+		exit
+	    }')
+	[ -n "${hex}" ] || return 1
+	echo $((0x${hex}))
+}
+
+choose_target()
+{
+	source_provider=$(mounted_provider /)
+	[ -n "${source_provider}" ] || die "cannot resolve live root provider"
+	source_disk=$(provider_disk "${source_provider}") ||
+	    die "unsupported live root provider: ${source_provider}"
+
+	if [ -n "${1:-}" ]; then
+		target_disk=$1
+	else
+		target_disk=
+		for disk in $(sysctl -n kern.disks); do
+			case "${disk}" in
+			mmcsd0|mmcsd1)
+				[ "${disk}" = "${source_disk}" ] ||
+				    target_disk="${target_disk} ${disk}"
+				;;
+			esac
+		done
+		set -- ${target_disk}
+		[ "$#" -eq 1 ] ||
+		    die "specify one target disk: ${0##*/} install mmcsdN"
+		target_disk=$1
+	fi
+
+	case "${target_disk}" in
+	mmcsd0|mmcsd1) ;;
+	*) die "target must be mmcsd0 or mmcsd1" ;;
+	esac
+	[ "${target_disk}" != "${source_disk}" ] ||
+	    die "refusing to overwrite live root disk ${source_disk}"
+	[ -c "/dev/${target_disk}" ] ||
+	    die "missing /dev/${target_disk}"
+
+	for provider in $(mount -p | awk '{ print $1 }'); do
+		disk=$(provider_disk "${provider}" 2>/dev/null || true)
+		[ "${disk}" != "${target_disk}" ] ||
+		    die "${target_disk} still has mounted filesystems"
+	done
+}
+
+choose_filesystem()
+{
+	if [ -n "${RK3588_INSTALL_FS:-}" ]; then
+		filesystem=${RK3588_INSTALL_FS}
+	else
+		exec 3>&1
+		filesystem=$(dialog --backtitle "RK3588 FreeBSD Installer" \
+		    --title "Root filesystem" --menu \
+		    "Choose the target root filesystem:" 0 0 0 \
+		    ufs "UFS with soft updates" \
+		    zfs "ZFS root pool" 2>&1 1>&3)
+		exec 3>&-
+	fi
+	case "${filesystem}" in
+	ufs|zfs) ;;
+	*) die "filesystem must be ufs or zfs" ;;
+	esac
+}
+
+choose_swap()
+{
+	if [ -n "${RK3588_INSTALL_SWAP_MIB:-}" ]; then
+		SWAP_MIB=${RK3588_INSTALL_SWAP_MIB}
+	else
+		exec 3>&1
+		SWAP_MIB=$(dialog --backtitle "RK3588 FreeBSD Installer" \
+		    --title "Swap size" --inputbox \
+		    "Swap partition size in MiB (0 disables swap):" \
+		    0 0 "0" 2>&1 1>&3)
+		exec 3>&-
+	fi
+	is_uint "${SWAP_MIB}" || die "swap size must be a non-negative integer"
+}
+
+confirm_install()
+{
+	[ "${RK3588_INSTALL_ASSUME_YES:-NO}" = YES ] && return
+	dialog --backtitle "RK3588 FreeBSD Installer" \
+	    --title "Destroy ${target_disk}" --defaultno --yesno \
+	    "ALL DATA on /dev/${target_disk} will be destroyed.\n\n\
+Live root: /dev/${source_disk}\n\
+Target: /dev/${target_disk}\n\
+Filesystem: ${filesystem}\n\
+Swap: ${SWAP_MIB} MiB\n\
+Firmware area: ${FIRMWARE_MIB} MiB\n\n\
+Continue?" 0 0 ||
+	    exit 0
+}
+
+check_capacity()
+{
+	disk_info=$(diskinfo "/dev/${target_disk}")
+	sector_size=$(echo "${disk_info}" | awk '{ print $2 }')
+	[ "${sector_size}" = 512 ] ||
+	    die "${target_disk} must expose 512-byte logical sectors"
+	media_bytes=$(echo "${disk_info}" | awk '{ print $3 }')
+	is_uint "${media_bytes}" || die "cannot read ${target_disk} capacity"
+	minimum_bytes=$(((root_start + 2097152) * 512))
+	[ "${media_bytes}" -ge "${minimum_bytes}" ] ||
+	    die "${target_disk} is too small; at least 1 GiB root space is required"
+}
+
+partition_target()
+{
+	if gpart show "${target_disk}" >/dev/null 2>&1; then
+		gpart destroy -F "${target_disk}"
+	fi
+	gpart create -s gpt "${target_disk}"
+	firmware_start=$(gpart show -p "${target_disk}" |
+	    awk '$3 == "-" && $4 == "free" { print $1; exit }')
+	is_uint "${firmware_start}" ||
+	    die "cannot determine first usable GPT sector"
+	[ "${firmware_start}" -le 64 ] ||
+	    die "GPT metadata overlaps idbloader at LBA 64"
+	firmware_sectors=$((reserve_sectors - firmware_start))
+	[ "${firmware_sectors}" -gt 0 ] ||
+	    die "firmware reservation is too small"
+	gpart add -b "${firmware_start}" -s "${firmware_sectors}" \
+	    -t freebsd-boot -l rk3588_firmware "${target_disk}"
+	gpart add -b "${esp_start}" -s "${esp_sectors}" \
+	    -t efi -l EFI "${target_disk}"
+	if [ "${SWAP_MIB}" -gt 0 ]; then
+		gpart add -b "${swap_start}" -s "${swap_sectors}" \
+		    -t freebsd-swap -l freebsd_swap "${target_disk}"
+	fi
+	gpart add -b "${root_start}" -t "freebsd-${filesystem}" \
+	    -l freebsd_root "${target_disk}"
+}
+
+prepare_bsdinstall()
+{
+	install_work=$(mktemp -d /tmp/rk3588-install.XXXXXX)
+	export BSDINSTALL_TMPETC="${install_work}/etc"
+	export BSDINSTALL_TMPBOOT="${install_work}/boot"
+	export PATH_FSTAB="${BSDINSTALL_TMPETC}/fstab"
+	export BSDINSTALL_DISTDIR BSDINSTALL_CHROOT DISTRIBUTIONS
+	mkdir -p "${BSDINSTALL_TMPETC}" "${BSDINSTALL_TMPBOOT}"
+	: > "${PATH_FSTAB}"
+
+	bsdinstall keymap || true
+	bsdinstall hostname
+}
+
+mount_target()
+{
+	mkdir -p "${BSDINSTALL_CHROOT}"
+	newfs_msdos -F 16 -L EFI "/dev/${target_disk}p2" >/dev/null
+
+	if [ "${filesystem}" = ufs ]; then
+		newfs -U -L "${ROOT_LABEL}" \
+		    "/dev/${target_disk}p${root_partition}" >/dev/null
+		mount "/dev/${target_disk}p${root_partition}" \
+		    "${BSDINSTALL_CHROOT}"
+		root_mounted=1
+		printf '/dev/ufs/%s\t/\tufs\trw,noatime\t1\t1\n' \
+		    "${ROOT_LABEL}" >> "${PATH_FSTAB}"
+	else
+		zpool create -f -R "${BSDINSTALL_CHROOT}" \
+		    -O atime=off -O compression=lz4 -O mountpoint=none \
+		    "${ZFS_POOL_NAME}" \
+		    "/dev/${target_disk}p${root_partition}"
+		pool_created=1
+		zfs create -o mountpoint=none "${ZFS_POOL_NAME}/ROOT"
+		zfs create -o mountpoint=/ "${ZFS_POOL_NAME}/ROOT/default"
+		zpool set bootfs="${ZFS_POOL_NAME}/ROOT/default" \
+		    "${ZFS_POOL_NAME}"
+	fi
+
+	mkdir -p "${BSDINSTALL_CHROOT}/boot/efi"
+	mount -t msdosfs "/dev/${target_disk}p2" \
+	    "${BSDINSTALL_CHROOT}/boot/efi"
+	esp_mounted=1
+	printf '/dev/msdosfs/EFI\t/boot/efi\tmsdosfs\trw,noatime\t0\t0\n' \
+	    >> "${PATH_FSTAB}"
+	if [ "${SWAP_MIB}" -gt 0 ]; then
+		printf '/dev/gpt/freebsd_swap\tnone\tswap\tsw\t0\t0\n' \
+		    >> "${PATH_FSTAB}"
+	fi
+}
+
+write_component()
+{
+	file=$1
+	lba=$2
+	limit=$3
+	size=$(stat -f %z "${file}")
+	offset=$((lba * 512))
+
+	[ $((size % 512)) -eq 0 ] ||
+	    die "${file} is not sector aligned"
+	[ $((offset + size)) -le "${limit}" ] ||
+	    die "${file} exceeds its reserved region"
+
+	dd if="${file}" of="/dev/${target_disk}" bs=512 seek="${lba}" \
+	    conv=notrunc,sync status=none
+	dd if="/dev/${target_disk}" bs=512 skip="${lba}" \
+	    count=$((size / 512)) status=none |
+	    cmp -s "${file}" - ||
+	    die "verification failed for ${file}"
+}
+
+configure_target()
+{
+	mkdir -p "${BSDINSTALL_CHROOT}/boot/efi/dtb" \
+	    "${BSDINSTALL_CHROOT}/boot/modules"
+	cp -p "${PAYLOAD}/freebsd.dtb" \
+	    "${BSDINSTALL_CHROOT}/boot/efi/dtb/freebsd.dtb"
+	cp -p "${PAYLOAD}/bootmenu.env" \
+	    "${BSDINSTALL_CHROOT}/boot/efi/bootmenu.env"
+	if [ -f /boot/modules/if_rge.ko ]; then
+		cp -p /boot/modules/if_rge.ko \
+		    "${BSDINSTALL_CHROOT}/boot/modules/if_rge.ko"
+	fi
+
+	for setting in \
+	    boot_multicons=YES \
+	    boot_serial=YES \
+	    console=comconsole,efi \
+	    comconsole_speed=1500000 \
+	    hw.rk3588.efi_fdt_highmem=1
+	do
+		sysrc -q -R "${BSDINSTALL_CHROOT}" -f /boot/loader.conf \
+		    "${setting}"
+	done
+	if [ -f "${BSDINSTALL_CHROOT}/boot/modules/if_rge.ko" ]; then
+		sysrc -q -R "${BSDINSTALL_CHROOT}" -f /boot/loader.conf \
+		    if_rge_load=YES
+		sysrc -q -R "${BSDINSTALL_CHROOT}" -f /boot/loader.conf \
+		    if_rge_name=/boot/modules/if_rge.ko
+	fi
+	if [ "${filesystem}" = zfs ]; then
+		mkdir -p "${BSDINSTALL_CHROOT}/boot/zfs"
+		zpool set cachefile="${BSDINSTALL_CHROOT}/boot/zfs/zpool.cache" \
+		    "${ZFS_POOL_NAME}"
+		sysrc -q -R "${BSDINSTALL_CHROOT}" -f /boot/loader.conf \
+		    zfs_load=YES
+		sysrc -q -R "${BSDINSTALL_CHROOT}" -f /boot/loader.conf \
+		    vfs.root.mountfrom="zfs:${ZFS_POOL_NAME}/ROOT/default"
+		sysrc -q -R "${BSDINSTALL_CHROOT}" zfs_enable=YES
+	fi
+
+	storage=$(boot_storage) ||
+	    die "cannot read /chosen/rockchip,boot-storage"
+	case "${storage}" in
+	1|2)
+		reserve=$((FIRMWARE_MIB * 1024 * 1024))
+		write_component "${PAYLOAD}/idbloader.img" 64 $((0x4000 * 512))
+		write_component "${PAYLOAD}/u-boot.itb" 16384 \
+		    $((0x6000 * 512))
+		write_component "${PAYLOAD}/logo.img" 24576 "${reserve}"
+		;;
+	9) ;;
+	*) die "unsupported boot storage: ${storage}" ;;
+	esac
+}
+
+configure_freebsd()
+{
+	bsdinstall checksum
+	bsdinstall distextract
+	bsdinstall bootconfig
+	bsdinstall rootpass
+	bsdinstall netconfig || true
+	bsdinstall time
+	bsdinstall services
+	bsdinstall hardening
+	bsdinstall firmware || true
+
+	if dialog --backtitle "RK3588 FreeBSD Installer" \
+	    --title "Add User Accounts" --yesno \
+	    "Would you like to add a user now?" 0 0; then
+		bsdinstall adduser
+	fi
+
+	bsdinstall config
+	configure_target
+	bsdinstall entropy
+}
+
+cleanup()
+{
+	set +e
+	sync
+	if [ "${esp_mounted:-0}" = 1 ]; then
+		umount "${BSDINSTALL_CHROOT}/boot/efi"
+	fi
+	if [ "${pool_created:-0}" = 1 ]; then
+		zpool export "${ZFS_POOL_NAME}"
+	elif [ "${root_mounted:-0}" = 1 ]; then
+		umount "${BSDINSTALL_CHROOT}"
+	fi
+	if [ -n "${install_work:-}" ] && [ -d "${install_work}" ]; then
+		find "${install_work}" -depth -delete
+	fi
+}
+
+install_system()
+{
+	read_config
+	choose_target "${1:-}"
+	choose_filesystem
+	choose_swap
+	calculate_layout
+	check_capacity
+	confirm_install
+
+	esp_mounted=0
+	root_mounted=0
+	pool_created=0
+	install_work=
+	trap cleanup EXIT
+	trap 'exit 1' HUP INT TERM
+
+	prepare_bsdinstall
+	partition_target
+	mount_target
+	configure_freebsd
+	cleanup
+	trap - EXIT HUP INT TERM
+
+	echo "FreeBSD installation on /dev/${target_disk} completed."
+}
+
+assert_eq()
+{
+	[ "$1" = "$2" ] || die "selftest: expected $2, got $1"
+}
+
+selftest()
+{
+	FIRMWARE_MIB=16
+	ESP_MIB=256
+	SWAP_MIB=0
+	calculate_layout
+	assert_eq "${firmware_sectors}" 32728
+	assert_eq "${esp_start}" 32768
+	assert_eq "${root_start}" 557056
+	assert_eq "${root_partition}" 3
+
+	FIRMWARE_MIB=32
+	SWAP_MIB=512
+	calculate_layout
+	assert_eq "${firmware_sectors}" 65496
+	assert_eq "${esp_start}" 65536
+	assert_eq "${root_start}" 1638400
+	assert_eq "${root_partition}" 4
+	echo "rk3588-install selftest passed"
+}
+
+case "${1:-launch}" in
+launch)
+	install_system
+	;;
+install)
+	shift
+	install_system "${1:-}"
+	;;
+selftest)
+	selftest
+	;;
+*)
+	die "usage: ${0##*/} [launch | install [mmcsdN] | selftest]"
+	;;
+esac
