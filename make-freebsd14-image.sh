@@ -17,11 +17,31 @@ BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
 STAMP=${STAMP:-$(date +%Y%m%d-%H%M%S)}
 LOGO_BMP=${LOGO_BMP:-${IMAGE_LOGO_BMP}}
 ROOTFS_TYPE=${ROOTFS_TYPE:-ufs}
+INSTALLER=${INSTALLER:-NO}
 ROOTFS_SUFFIX=
 if [ "${ROOTFS_TYPE}" = "zfs" ]; then
 	ROOTFS_SUFFIX=-zfs
 fi
-OUT=${OUT:-${IMAGE_OUTPUT_DIR}/${BOARD}-freebsd${FREEBSD_OBJ_VERSION}${ROOTFS_SUFFIX}-uboot${UBOOT_VERSION}-${STAMP}.img}
+case "${INSTALLER}" in
+YES)
+	[ "${ROOTFS_TYPE}" = "ufs" ] ||
+	    {
+		echo "${0##*/}: installer image must use a UFS live root" >&2
+		exit 1
+	    }
+	SWAP_SIZE_MIB=0
+	if [ "${ROOT_SIZE_MIB}" -lt 1536 ]; then
+		ROOT_SIZE_MIB=1536
+	fi
+	ROOTFS_SUFFIX=${ROOTFS_SUFFIX}-installer
+	;;
+NO) ;;
+*)
+	echo "${0##*/}: INSTALLER must be YES or NO" >&2
+	exit 1
+	;;
+esac
+OUT=${OUT:-${IMAGE_OUTPUT_DIR}/${BOARD}-freebsd${FREEBSD_OBJ_VERSION}${ROOTFS_SUFFIX}-uboot${UBOOT_VERSION}-${FIRMWARE_MIB}m-${STAMP}.img}
 WORK=${WORK:-}
 
 usage()
@@ -50,6 +70,9 @@ UBOOT_BIN=${UBOOT_DIR}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin
 IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb
 BOOTMENU_FILE=${UBOOT_DIR}/bootmenu.env
+LOGO_IMG=${UBOOT_DIR}/logo.img
+INSTALLER_SCRIPT=${BOARD_DIR}/installer/rk3588-install
+MANIFEST_SCRIPT=${FREEBSD_SRC_DIR}/release/scripts/make-manifest.sh
 
 die()
 {
@@ -138,6 +161,11 @@ for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${RGE_TXZ}" "${UBOOT_BIN}" \
     "${FREEBSD_DTB}" "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
+if [ "${INSTALLER}" = "YES" ]; then
+	for file in "${LOGO_IMG}" "${INSTALLER_SCRIPT}" "${MANIFEST_SCRIPT}"; do
+		[ -f "${file}" ] || die "missing installer input: ${file}"
+	done
+fi
 [ ! -e "${OUT}" ] || die "output already exists: ${OUT}"
 
 for cmd in mdconfig gpart newfs newfs_msdos mount umount tar chflags \
@@ -198,6 +226,37 @@ fi
 mkdir -p "${root_mnt}/boot/efi" "${root_mnt}/tmp" \
     "${root_mnt}/var/log" "${root_mnt}/var/tmp"
 touch "${root_mnt}/firstboot"
+
+if [ "${INSTALLER}" = "YES" ]; then
+	distdir="${root_mnt}/usr/freebsd-dist"
+	payload="${root_mnt}/usr/local/share/rk3588-installer"
+	mkdir -p "${distdir}" "${payload}" \
+	    "${root_mnt}/usr/local/sbin" \
+	    "${root_mnt}/usr/libexec/bsdinstall"
+	cp -p "${BASE_TXZ}" "${distdir}/base.txz"
+	cp -p "${KERNEL_TXZ}" "${distdir}/kernel.txz"
+	(
+		cd "${distdir}"
+		sh "${MANIFEST_SCRIPT}" base.txz kernel.txz > MANIFEST
+	)
+	cp -p "${IDBLOADER}" "${payload}/idbloader.img"
+	cp -p "${UBOOT_ITB}" "${payload}/u-boot.itb"
+	cp -p "${LOGO_IMG}" "${payload}/logo.img"
+	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
+	cp -p "${BOOTMENU_FILE}" "${payload}/bootmenu.env"
+	printf 'FIRMWARE_MIB=%s\n' "${FIRMWARE_MIB}" \
+	    > "${payload}/config"
+	cp -p "${INSTALLER_SCRIPT}" \
+	    "${root_mnt}/usr/local/sbin/rk3588-install"
+	chmod 0555 "${root_mnt}/usr/local/sbin/rk3588-install"
+	ln -sf /usr/local/sbin/rk3588-install \
+	    "${root_mnt}/usr/libexec/bsdinstall/local.post-configure"
+	cat > "${root_mnt}/etc/rc.local" <<'EOF'
+#!/bin/sh
+/usr/local/sbin/rk3588-install launch
+EOF
+	chmod 0555 "${root_mnt}/etc/rc.local"
+fi
 
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 	printf '/dev/ufs/%s\t/\t\tufs\trw,noatime\t\t1 1\n' \
@@ -282,6 +341,7 @@ u-boot.itb: ${uboot_sha}
 FreeBSD DTB: ${dtb_sha}
 logo.bmp: ${logo_sha}
 Root filesystem: ${ROOTFS_TYPE}
+Installer image: ${INSTALLER}
 EOF
 
 sync
@@ -377,6 +437,7 @@ SHA256: ${image_sha}
 Board: ${BOARD}
 FreeBSD source commit: ${src_commit}
 Root filesystem: ${ROOTFS_TYPE}
+Installer image: ${INSTALLER}
 U-Boot: ${UBOOT_DIR}
 U-Boot firmware: ${UBOOT_BIN}
 U-Boot firmware SHA256: ${firmware_sha}

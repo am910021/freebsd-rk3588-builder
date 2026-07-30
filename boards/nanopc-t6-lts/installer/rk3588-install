@@ -1,0 +1,146 @@
+#!/bin/sh
+set -eu
+
+PAYLOAD=/usr/local/share/rk3588-installer
+
+die()
+{
+	echo "${0##*/}: $*" >&2
+	exit 1
+}
+
+[ -r "${PAYLOAD}/config" ] || die "missing ${PAYLOAD}/config"
+. "${PAYLOAD}/config"
+case "${FIRMWARE_MIB:-}" in
+16|32) ;;
+*) die "FIRMWARE_MIB must be 16 or 32" ;;
+esac
+
+mounted_provider()
+{
+	mount -p | awk -v path="$1" '$2 == path { print $1; exit }'
+}
+
+provider_disk()
+{
+	provider=${1#/dev/}
+	case "${provider}" in
+	mmcsd0|mmcsd0p*) echo mmcsd0; return ;;
+	mmcsd1|mmcsd1p*) echo mmcsd1; return ;;
+	esac
+
+	provider=$(geom label status -s |
+	    awk -v name="${provider}" '$1 == name { print $3; exit }')
+	case "${provider}" in
+	mmcsd0|mmcsd0p*) echo mmcsd0 ;;
+	mmcsd1|mmcsd1p*) echo mmcsd1 ;;
+	*) return 1 ;;
+	esac
+}
+
+boot_storage()
+{
+	hex=$(ofwdump -P rockchip,boot-storage /chosen |
+	    awk 'NF == 4 && $1 ~ /^[[:xdigit:]][[:xdigit:]]$/ {
+		print $4
+		exit
+	    }')
+	[ -n "${hex}" ] || return 1
+	echo $((0x${hex}))
+}
+
+write_component()
+{
+	file=$1
+	lba=$2
+	limit=$3
+	size=$(stat -f %z "${file}")
+	offset=$((lba * 512))
+
+	[ $((size % 512)) -eq 0 ] ||
+	    die "${file} is not sector aligned"
+	[ $((offset + size)) -le "${limit}" ] ||
+	    die "${file} exceeds its reserved region"
+
+	dd if="${file}" of="/dev/${target_disk}" bs=512 seek="${lba}" \
+	    conv=notrunc,sync status=none
+	dd if="/dev/${target_disk}" bs=512 skip="${lba}" \
+	    count=$((size / 512)) status=none |
+	    cmp -s "${file}" - ||
+	    die "verification failed for ${file}"
+}
+
+launch()
+{
+	export BSDINSTALL_DISTDIR=/usr/freebsd-dist
+	export BSDINSTALL_PARTITION_START="${FIRMWARE_MIB}M"
+	export DISTRIBUTIONS="base.txz kernel.txz"
+	unset BSDINSTALL_CONFIGCURRENT
+	exec /usr/sbin/bsdinstall auto
+}
+
+post_install()
+{
+	target=$1
+	[ -d "${target}" ] || die "invalid target root: ${target}"
+	[ -d "${target}/boot/efi" ] ||
+	    die "target ESP is not mounted"
+
+	source_provider=$(mounted_provider /)
+	target_provider=$(mounted_provider "${target}/boot/efi")
+	[ -n "${source_provider}" ] || die "cannot resolve installer root"
+	[ -n "${target_provider}" ] || die "cannot resolve target ESP"
+
+	source_disk=$(provider_disk "${source_provider}") ||
+	    die "unsupported installer provider: ${source_provider}"
+	target_disk=$(provider_disk "${target_provider}") ||
+	    die "unsupported target provider: ${target_provider}"
+	[ "${source_disk}" != "${target_disk}" ] ||
+	    die "refusing to overwrite installer disk ${source_disk}"
+
+	storage=$(boot_storage) ||
+	    die "cannot read /chosen/rockchip,boot-storage"
+	case "${storage}" in
+	1|2|9) ;;
+	*) die "unsupported boot storage: ${storage}" ;;
+	esac
+
+	mkdir -p "${target}/boot/efi/dtb" "${target}/boot/efi/EFI" \
+	    "${target}/boot/modules"
+	cp -p "${PAYLOAD}/freebsd.dtb" "${target}/boot/efi/dtb/freebsd.dtb"
+	cp -p "${PAYLOAD}/bootmenu.env" \
+	    "${target}/boot/efi/EFI/bootmenu.env"
+	cp -p /boot/modules/if_rge.ko "${target}/boot/modules/if_rge.ko"
+
+	for setting in \
+	    boot_multicons=YES \
+	    boot_serial=YES \
+	    console=comconsole,efi \
+	    comconsole_speed=1500000 \
+	    hw.rk3588.efi_fdt_highmem=1 \
+	    if_rge_load=YES \
+	    if_rge_name=/boot/modules/if_rge.ko
+	do
+		sysrc -q -R "${target}" -f /boot/loader.conf "${setting}"
+	done
+
+	if [ "${storage}" != 9 ]; then
+		reserve=$((FIRMWARE_MIB * 1024 * 1024))
+		write_component "${PAYLOAD}/idbloader.img" 64 $((0x4000 * 512))
+		write_component "${PAYLOAD}/u-boot.itb" 16384 $((0x6000 * 512))
+		write_component "${PAYLOAD}/logo.img" 24576 "${reserve}"
+		sync
+	fi
+}
+
+case "${1:-}" in
+launch)
+	launch
+	;;
+/*)
+	post_install "$1"
+	;;
+*)
+	die "usage: ${0##*/} launch | target-root"
+	;;
+esac
