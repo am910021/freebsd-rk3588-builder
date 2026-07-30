@@ -47,10 +47,10 @@ or inconsistent image.
    ./build-freebsd-release.sh
    ```
 
-6. Build the `if_rge` kernel module package:
+6. Build the configured ports:
 
    ```sh
-   ./build-if-rge-freebsd.sh
+   ./build-ports.sh
    ```
 
 7. Assemble the final FreeBSD image:
@@ -72,14 +72,13 @@ freebsd-rk3588-builder/
 |   |-- rkbin/
 |   `-- u-boot-2026.07/
 |-- work/                           Rebuildable objects and intermediate artifacts
-|   |-- if_rge_freebsd/
 |   |-- obj/
 |   `-- uboot-2026.07-16m/
 |-- builder.conf                    Shared settings
 |-- checkout.sh                     Fetch and update source repositories
 |-- build-freebsd-release.sh        Build FreeBSD base.txz and kernel.txz
 |-- build-u-boot-2026.07-complete.sh
-|-- build-if-rge-freebsd.sh
+|-- build-ports.sh                  Build target FreeBSD packages from ports
 `-- make-freebsd14-image.sh
 ```
 
@@ -169,7 +168,7 @@ A complete image requires:
 ```text
 output/14.3-p16/base.txz
 output/14.3-p16/kernel.txz
-output/14.3-p16/if_rge.txz
+output/14.3-p16/realtek-rge-kmod-20260728.pkg
 work/uboot-latest/
 ```
 
@@ -186,9 +185,9 @@ FREEBSD_OBJ=${FREEBSD_OBJ_ROOT}/arm64.aarch64
 KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 ```
 
-`build-if-rge-freebsd.sh` builds `src/ports/net/realtek-rge-kmod` with the
-same kernel objects and arm64 toolchain. The port pins its upstream source
-with `GH_TAGNAME`; no separate if_rge source checkout is needed.
+`build-ports.sh` builds every origin in `PORT_ORIGINS` with the same FreeBSD
+object tree and arm64 toolchain. Image assembly consumes only the resulting
+packages and never builds ports itself.
 
 ## Building U-Boot
 
@@ -301,18 +300,19 @@ output/<FreeBSD version>/base.txz
 output/<FreeBSD version>/kernel.txz
 ```
 
-## Building if_rge
+## Building Ports
 
 ```sh
-./build-if-rge-freebsd.sh
+./build-ports.sh
 ```
 
 Output:
 
 ```text
-work/if_rge_freebsd/if_rge.ko
-output/14.3-p16/if_rge-<commit>-freebsd14.3-p16-arm64.txz
-output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
+output/<FreeBSD version>/realtek-rge-kmod-<version>.pkg
+output/<FreeBSD version>/realtek-rge-kmod-<version>.pkg.sha256
+output/<FreeBSD version>/rk3588-installer-<version>.pkg
+output/<FreeBSD version>/rk3588-installer-<version>.pkg.sha256
 ```
 
 ## Building the FreeBSD Image
@@ -329,7 +329,7 @@ Or explicitly specify the txz archives and output image:
 ./make-freebsd14-image.sh \
     output/14.3-p16/base.txz \
     output/14.3-p16/kernel.txz \
-    output/14.3-p16/if_rge.txz \
+    output/14.3-p16/realtek-rge-kmod-20260728.pkg \
     output/14.3-p16/nanopc-t6-lts-freebsd14.3.img
 ```
 

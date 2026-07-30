@@ -43,10 +43,10 @@
    ./build-freebsd-release.sh
    ```
 
-6. 建立 `if_rge` kernel module 套件：
+6. 建立設定的 ports：
 
    ```sh
-   ./build-if-rge-freebsd.sh
+   ./build-ports.sh
    ```
 
 7. 組合最終 FreeBSD image：
@@ -68,14 +68,13 @@ freebsd-rk3588-builder/
 │   ├── rkbin/
 │   └── u-boot-2026.07/
 ├── work/                           可重建的 object 與中間產物
-│   ├── if_rge_freebsd/
 │   ├── obj/
 │   └── uboot-2026.07-16m/
 ├── builder.conf                    共用設定
 ├── checkout.sh                     取得及更新原始碼
 ├── build-freebsd-release.sh        建立 FreeBSD base.txz 與 kernel.txz
 ├── build-u-boot-2026.07-complete.sh
-├── build-if-rge-freebsd.sh
+├── build-ports.sh                  從 ports 建立 FreeBSD 目標套件
 └── make-freebsd14-image.sh
 ```
 
@@ -163,7 +162,7 @@ source repository 的同步。
 ```text
 output/14.3-p16/base.txz
 output/14.3-p16/kernel.txz
-output/14.3-p16/if_rge.txz
+output/14.3-p16/realtek-rge-kmod-20260728.pkg
 work/uboot-latest/
 ```
 
@@ -180,9 +179,9 @@ FREEBSD_OBJ=${FREEBSD_OBJ_ROOT}/arm64.aarch64
 KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 ```
 
-`build-if-rge-freebsd.sh` 會用同一套 kernel object 與 arm64 toolchain
-建置 `src/ports/net/realtek-rge-kmod`。此 port 透過 `GH_TAGNAME` 固定
-上游版本，不再需要另外 checkout if_rge 原始碼。
+`build-ports.sh` 會用同一套 FreeBSD object tree 與 arm64 toolchain
+建置 `PORT_ORIGINS` 內的所有 origin。image 組裝只使用建好的 package，
+不會在組裝期間編譯 port。
 
 ## 建立 U-Boot
 
@@ -293,18 +292,19 @@ output/<FreeBSD 版本>/base.txz
 output/<FreeBSD 版本>/kernel.txz
 ```
 
-## 建立 if_rge
+## 建立 Ports
 
 ```sh
-./build-if-rge-freebsd.sh
+./build-ports.sh
 ```
 
 輸出：
 
 ```text
-work/if_rge_freebsd/if_rge.ko
-output/14.3-p16/if_rge-<commit>-freebsd14.3-p16-arm64.txz
-output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
+output/<FreeBSD 版本>/realtek-rge-kmod-<版本>.pkg
+output/<FreeBSD 版本>/realtek-rge-kmod-<版本>.pkg.sha256
+output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg
+output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg.sha256
 ```
 
 ## 建立 FreeBSD image
@@ -321,7 +321,7 @@ output/14.3-p16/if_rge.txz -> if_rge-<commit>-freebsd14.3-p16-arm64.txz
 ./make-freebsd14-image.sh \
     output/14.3-p16/base.txz \
     output/14.3-p16/kernel.txz \
-    output/14.3-p16/if_rge.txz \
+    output/14.3-p16/realtek-rge-kmod-20260728.pkg \
     output/14.3-p16/nanopc-t6-lts-freebsd14.3.img
 ```
 

@@ -45,10 +45,11 @@ NO) ;;
 esac
 OUT=${OUT:-${IMAGE_OUTPUT_DIR}/${BOARD}-freebsd${FREEBSD_OBJ_VERSION}${ROOTFS_SUFFIX}-uboot${UBOOT_VERSION}-${FIRMWARE_MIB}m-${STAMP}.img}
 WORK=${WORK:-}
+rge_pkg=
 
 usage()
 {
-	echo "usage: ${0##*/} [base.txz kernel.txz if_rge.pkg [output.img]]" >&2
+	echo "usage: ${0##*/} [base.txz kernel.txz realtek-rge-kmod.pkg [output.img]]" >&2
 	exit 1
 }
 
@@ -57,12 +58,12 @@ case $# in
 	3)
 		BASE_TXZ=$1
 		KERNEL_TXZ=$2
-		RGE_PKG=$3
+		rge_pkg=$3
 		;;
 	4)
 		BASE_TXZ=$1
 		KERNEL_TXZ=$2
-		RGE_PKG=$3
+		rge_pkg=$3
 		OUT=$4
 		;;
 	*) usage ;;
@@ -128,15 +129,27 @@ root_mnt=
 esp_mnt=
 AUTO_WORK=0
 
-if [ -z "${RGE_PKG}" ]; then
-	for candidate in "${TXZ_ROOT}"/if_rge*.pkg; do
+if [ -z "${rge_pkg}" ]; then
+	for candidate in "${TXZ_ROOT}"/realtek-rge-kmod-*.pkg; do
 		[ -f "${candidate}" ] || continue
-		[ -z "${RGE_PKG}" ] ||
+		[ -z "${rge_pkg}" ] ||
 		    die "multiple if_rge packages in ${TXZ_ROOT}"
-		RGE_PKG=${candidate}
+		rge_pkg=${candidate}
 	done
-	[ -n "${RGE_PKG}" ] ||
+	[ -n "${rge_pkg}" ] ||
 	    die "no if_rge package found in ${TXZ_ROOT}"
+fi
+
+installer_pkg=
+if [ "${INSTALLER}" = "YES" ]; then
+	for candidate in "${TXZ_ROOT}"/rk3588-installer-*.pkg; do
+		[ -f "${candidate}" ] || continue
+		[ -z "${installer_pkg}" ] ||
+		    die "multiple rk3588-installer packages in ${TXZ_ROOT}"
+		installer_pkg=${candidate}
+	done
+	[ -n "${installer_pkg}" ] ||
+	    die "no rk3588-installer package found in ${TXZ_ROOT}"
 fi
 
 cleanup()
@@ -156,15 +169,13 @@ cleanup()
 	fi
 }
 
-for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${RGE_PKG}" "${UBOOT_BIN}" \
+for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${rge_pkg}" "${UBOOT_BIN}" \
     "${IDBLOADER}" "${UBOOT_ITB}" "${BOOTMENU_FILE}" \
     "${FREEBSD_DTB}" "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
 if [ "${INSTALLER}" = "YES" ]; then
-	for file in "${MANIFEST_SCRIPT}" \
-	    "${RK3588_INSTALLER_PORT_DIR}/Makefile" \
-	    "${RK3588_INSTALLER_PORT_DIR}/files/rk3588-install.in"; do
+	for file in "${MANIFEST_SCRIPT}" "${installer_pkg}"; do
 		[ -f "${file}" ] || die "missing installer input: ${file}"
 	done
 fi
@@ -178,12 +189,6 @@ if [ "${ROOTFS_TYPE}" = "zfs" ]; then
 	for cmd in makefs zdb; do
 		command -v "${cmd}" >/dev/null 2>&1 ||
 		    die "missing command: ${cmd}"
-	done
-fi
-if [ "${INSTALLER}" = "YES" ]; then
-	for cmd in make; do
-		command -v "${cmd}" >/dev/null 2>&1 ||
-		    die "missing installer command: ${cmd}"
 	done
 fi
 
@@ -201,22 +206,6 @@ mkdir -p "$(dirname "${OUT}")"
 root_mnt="${WORK}/root"
 esp_mnt="${WORK}/esp"
 mkdir -p "${root_mnt}" "${esp_mnt}"
-
-installer_pkg=
-if [ "${INSTALLER}" = "YES" ]; then
-	installer_port_work="${WORK}/rk3588-installer-port"
-	make -C "${RK3588_INSTALLER_PORT_DIR}" -DBATCH \
-	    ALLOW_UNSUPPORTED_SYSTEM=yes \
-	    WRKDIR="${installer_port_work}" package
-	for candidate in "${installer_port_work}"/pkg/rk3588-installer-*.pkg; do
-		[ -f "${candidate}" ] || continue
-		[ -z "${installer_pkg}" ] ||
-		    die "multiple rk3588-installer packages produced"
-		installer_pkg=${candidate}
-	done
-	[ -n "${installer_pkg}" ] ||
-	    die "rk3588-installer package was not produced"
-fi
 
 echo "== Creating GPT image =="
 truncate -s $((TOTAL_SECTORS * 512)) "${OUT}"
@@ -239,7 +228,7 @@ if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 fi
 tar -xpf "${BASE_TXZ}" -C "${root_mnt}"
 tar -xpf "${KERNEL_TXZ}" -C "${root_mnt}"
-ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${RGE_PKG}"
+ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${rge_pkg}"
 if [ -d "${BOARD_FILES_DIR}" ]; then
 	(cd "${BOARD_FILES_DIR}" && tar -cpf - .) |
 	    (cd "${root_mnt}" && tar -xpf -)
@@ -264,7 +253,7 @@ if [ "${INSTALLER}" = "YES" ]; then
 		sh "${MANIFEST_SCRIPT}" base.txz kernel.txz > MANIFEST
 	)
 	cp -p "${UBOOT_BIN}" "${payload}/firmware.bin"
-	cp -p "${RGE_PKG}" "${payload}/if_rge.pkg"
+	cp -p "${rge_pkg}" "${payload}/if_rge.pkg"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
 	cp -p "${BOOTMENU_FILE}" "${payload}/bootmenu.env"
 	cat > "${payload}/config" <<EOF
@@ -337,7 +326,7 @@ fi
 
 base_sha=$(sha256 -q "${BASE_TXZ}")
 kernel_sha=$(sha256 -q "${KERNEL_TXZ}")
-rge_sha=$(sha256 -q "${RGE_PKG}")
+rge_sha=$(sha256 -q "${rge_pkg}")
 firmware_sha=$(sha256 -q "${UBOOT_BIN}")
 idb_sha=$(sha256 -q "${IDBLOADER}")
 uboot_sha=$(sha256 -q "${UBOOT_ITB}")
@@ -460,7 +449,7 @@ U-Boot firmware: ${UBOOT_BIN}
 U-Boot firmware SHA256: ${firmware_sha}
 FreeBSD DTB: ${FREEBSD_DTB}
 U-Boot FDT overlays: ${UBOOT_FDT_OVERLAYS}
-if_rge.pkg: ${RGE_PKG}
+if_rge.pkg: ${rge_pkg}
 if_rge.pkg SHA256: ${rge_sha}
 Layout:
   raw firmware:  0-${FIRMWARE_MIB} MiB
