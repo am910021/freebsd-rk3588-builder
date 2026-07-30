@@ -13,11 +13,9 @@
 ```text
 freebsd-rk3588-builder/
 ├── boards/                         board 專屬設定、DTS、menu 與檔案覆蓋
-├── dtb/                            相容用的共用 DTB
 ├── output/                         可交付產物
 │   └── 14.3-p16/                   image、txz 與 checksum
 ├── src/
-│   ├── devicetree-rebasing/
 │   ├── freebsd-src/
 │   ├── if_rge_freebsd/
 │   ├── rkbin/
