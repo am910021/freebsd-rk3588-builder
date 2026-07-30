@@ -48,7 +48,7 @@ WORK=${WORK:-}
 
 usage()
 {
-	echo "usage: ${0##*/} [base.txz kernel.txz if_rge.txz [output.img]]" >&2
+	echo "usage: ${0##*/} [base.txz kernel.txz if_rge.pkg [output.img]]" >&2
 	exit 1
 }
 
@@ -57,12 +57,12 @@ case $# in
 	3)
 		BASE_TXZ=$1
 		KERNEL_TXZ=$2
-		RGE_TXZ=$3
+		RGE_PKG=$3
 		;;
 	4)
 		BASE_TXZ=$1
 		KERNEL_TXZ=$2
-		RGE_TXZ=$3
+		RGE_PKG=$3
 		OUT=$4
 		;;
 	*) usage ;;
@@ -129,14 +129,14 @@ root_mnt=
 esp_mnt=
 AUTO_WORK=0
 
-if [ -z "${RGE_TXZ}" ]; then
-	for candidate in "${TXZ_ROOT}"/if_rge*.txz; do
+if [ -z "${RGE_PKG}" ]; then
+	for candidate in "${TXZ_ROOT}"/if_rge*.pkg; do
 		[ -f "${candidate}" ] || continue
-		[ -z "${RGE_TXZ}" ] ||
+		[ -z "${RGE_PKG}" ] ||
 		    die "multiple if_rge packages in ${TXZ_ROOT}"
-		RGE_TXZ=${candidate}
+		RGE_PKG=${candidate}
 	done
-	[ -n "${RGE_TXZ}" ] ||
+	[ -n "${RGE_PKG}" ] ||
 	    die "no if_rge package found in ${TXZ_ROOT}"
 fi
 
@@ -157,7 +157,7 @@ cleanup()
 	fi
 }
 
-for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${RGE_TXZ}" "${UBOOT_BIN}" \
+for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${RGE_PKG}" "${UBOOT_BIN}" \
     "${IDBLOADER}" "${UBOOT_ITB}" "${BOOTMENU_FILE}" \
     "${FREEBSD_DTB}" "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
@@ -172,7 +172,7 @@ fi
 [ ! -e "${OUT}" ] || die "output already exists: ${OUT}"
 
 for cmd in mdconfig gpart newfs newfs_msdos mount umount tar chflags \
-    truncate dd mktemp sha256 python3 fsck_msdosfs fsck_ufs; do
+    truncate dd mktemp sha256 python3 fsck_msdosfs fsck_ufs pkg; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
 if [ "${ROOTFS_TYPE}" = "zfs" ]; then
@@ -182,7 +182,7 @@ if [ "${ROOTFS_TYPE}" = "zfs" ]; then
 	done
 fi
 if [ "${INSTALLER}" = "YES" ]; then
-	for cmd in make pkg; do
+	for cmd in make; do
 		command -v "${cmd}" >/dev/null 2>&1 ||
 		    die "missing installer command: ${cmd}"
 	done
@@ -240,7 +240,7 @@ if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 fi
 tar -xpf "${BASE_TXZ}" -C "${root_mnt}"
 tar -xpf "${KERNEL_TXZ}" -C "${root_mnt}"
-tar -xpf "${RGE_TXZ}" -C "${root_mnt}"
+ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${RGE_PKG}"
 if [ -d "${BOARD_FILES_DIR}" ]; then
 	(cd "${BOARD_FILES_DIR}" && tar -cpf - .) |
 	    (cd "${root_mnt}" && tar -xpf -)
@@ -344,7 +344,7 @@ fi
 
 base_sha=$(sha256 -q "${BASE_TXZ}")
 kernel_sha=$(sha256 -q "${KERNEL_TXZ}")
-rge_sha=$(sha256 -q "${RGE_TXZ}")
+rge_sha=$(sha256 -q "${RGE_PKG}")
 firmware_sha=$(sha256 -q "${UBOOT_BIN}")
 idb_sha=$(sha256 -q "${IDBLOADER}")
 uboot_sha=$(sha256 -q "${UBOOT_ITB}")
@@ -358,7 +358,7 @@ Board: ${BOARD}
 FreeBSD source commit: ${src_commit}
 base.txz: ${base_sha}
 kernel.txz: ${kernel_sha}
-if_rge.txz: ${rge_sha}
+if_rge.pkg: ${rge_sha}
 firmware.bin: ${firmware_sha}
 idbloader.img: ${idb_sha}
 u-boot.itb: ${uboot_sha}
@@ -467,8 +467,8 @@ U-Boot firmware: ${UBOOT_BIN}
 U-Boot firmware SHA256: ${firmware_sha}
 FreeBSD DTB: ${FREEBSD_DTB}
 U-Boot FDT overlays: ${UBOOT_FDT_OVERLAYS}
-if_rge.txz: ${RGE_TXZ}
-if_rge.txz SHA256: ${rge_sha}
+if_rge.pkg: ${RGE_PKG}
+if_rge.pkg SHA256: ${rge_sha}
 Layout:
   raw firmware:  0-${FIRMWARE_MIB} MiB
   p1 ESP:        ${FIRMWARE_MIB}-${ESP_END_MIB} MiB

@@ -11,7 +11,6 @@ BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
 . "${BUILDER_CONFIG}"
 
 OUTPUT_DIR=${OUTPUT_DIR:-${RGE_WORK_DIR}}
-OBJ_ROOT=${OBJ_ROOT:-${RGE_OBJ_ROOT}}
 
 die()
 {
@@ -21,51 +20,72 @@ die()
 
 [ -f "${IF_RGE_SRC_DIR}/src/Makefile" ] ||
 	die "missing if_rge source: ${IF_RGE_SRC_DIR}"
+[ -f "${RGE_PORT_DIR}/Makefile" ] ||
+	die "missing if_rge port: ${RGE_PORT_DIR}"
 [ -d "${FREEBSD_SRC_DIR}/sys" ] ||
 	die "missing FreeBSD source: ${FREEBSD_SRC_DIR}"
 [ -f "${KERNBUILDDIR}/opt_global.h" ] ||
 	die "missing kernel build directory: ${KERNBUILDDIR}"
 [ -x "${TOOLBIN}/cc" ] || die "missing arm64 toolchain: ${TOOLBIN}"
+[ -x "${FREEBSD_OBJ}/bin/sh/sh" ] ||
+	die "missing target ABI executable: ${FREEBSD_OBJ}/bin/sh/sh"
 [ -z "$(git -C "${IF_RGE_SRC_DIR}" status --porcelain)" ] ||
 	die "if_rge source has uncommitted changes"
 
-for cmd in make git tar sha256 readelf mktemp; do
+for cmd in make git pkg sha256 readelf mktemp; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
 
-commit=$(git -C "${IF_RGE_SRC_DIR}" rev-parse --short HEAD)
-package=${TXZ_ROOT}/if_rge-${commit}-freebsd${FREEBSD_OBJ_VERSION}-arm64.txz
-mkdir -p "${OUTPUT_DIR}" "${OBJ_ROOT}" "${TXZ_ROOT}" "${WORK_ROOT}/tmp"
+commit=$(git -C "${IF_RGE_SRC_DIR}" rev-parse HEAD)
+port_commit=$(make -C "${RGE_PORT_DIR}" ALLOW_UNSUPPORTED_SYSTEM=yes \
+    -V GH_TAGNAME)
+[ "${commit}" = "${port_commit}" ] ||
+	die "if_rge source ${commit} does not match port ${port_commit}"
+osversion=$(awk '
+    $1 == "#define" && $2 == "__FreeBSD_version" { print $3; exit }
+' "${FREEBSD_SRC_DIR}/sys/sys/param.h")
+[ -n "${osversion}" ] || die "cannot determine target OSVERSION"
+
+mkdir -p "${OUTPUT_DIR}" "${TXZ_ROOT}" "${WORK_ROOT}/tmp"
 work=$(mktemp -d "${WORK_ROOT}/tmp/if-rge-package.XXXXXX")
 trap 'rm -rf "${work}"' EXIT INT TERM
 
-mkdir -p "${work}/boot/modules"
+env MAKEOBJDIRPREFIX="${FREEBSD_OBJ_ROOT}" \
+    MACHINE=arm64 MACHINE_ARCH=aarch64 \
+    TARGET=arm64 TARGET_ARCH=aarch64 ARCH=aarch64 \
+    OSVERSION="${osversion}" \
+    PATH="${TOOLBIN}:${PATH}" \
+    make -C "${RGE_PORT_DIR}" -DBATCH \
+    ALLOW_UNSUPPORTED_SYSTEM=yes \
+    SRC_BASE="${FREEBSD_SRC_DIR}" \
+    KERNBUILDDIR="${KERNBUILDDIR}" \
+    WRKDIR="${work}/port" \
+    "PKG_ENV+=ABI_FILE=${FREEBSD_OBJ}/bin/sh/sh" \
+    stage check-plist package
 
-build_make()
-{
-	env MAKEOBJDIRPREFIX="${OBJ_ROOT}" \
-	    MACHINE=arm64 MACHINE_ARCH=aarch64 \
-	    TARGET=arm64 TARGET_ARCH=aarch64 \
-	    PATH="${TOOLBIN}:${PATH}" \
-	    make -C "${IF_RGE_SRC_DIR}/src" SYSDIR="${FREEBSD_SRC_DIR}/sys" \
-	    KERNBUILDDIR="${KERNBUILDDIR}" "$@"
-}
-
-build_make obj
-build_make clean all
-objdir=$(build_make -V .OBJDIR)
-module=${objdir}/if_rge.ko
+module=${work}/port/stage/boot/modules/if_rge.ko
+package=
+for candidate in "${work}"/port/pkg/realtek-rge-kmod-*.pkg; do
+	[ -f "${candidate}" ] || continue
+	[ -z "${package}" ] || die "multiple if_rge packages produced"
+	package=${candidate}
+done
 
 [ -f "${module}" ] || die "build did not produce ${module}"
+[ -n "${package}" ] || die "build did not produce an if_rge package"
 readelf -h "${module}" | grep -q 'Machine:.*AArch64' ||
 	die "module is not AArch64"
+metadata=$(pkg query -F "${package}" '%n|%o|%q')
+[ "${metadata}" = "realtek-rge-kmod|net/realtek-rge-kmod|FreeBSD:${FREEBSD_OBJ_VERSION%%.*}:aarch64" ] ||
+	die "unexpected package metadata: ${metadata}"
 
 cp -p "${module}" "${OUTPUT_DIR}/if_rge.ko"
-cp -p "${module}" "${work}/boot/modules/if_rge.ko"
-tar -cJf "${package}" -C "${work}" boot/modules/if_rge.ko
-ln -sfn "${package##*/}" "${TXZ_ROOT}/if_rge.txz"
+output_package=${TXZ_ROOT}/${package##*/}
+cp -p "${package}" "${output_package}"
+ln -sfn "${output_package##*/}" "${TXZ_ROOT}/if_rge.pkg"
 
-sha256 "${OUTPUT_DIR}/if_rge.ko" "${package}" > "${package}.sha256"
+sha256 "${OUTPUT_DIR}/if_rge.ko" "${output_package}" \
+    > "${output_package}.sha256"
 
 echo "if_rge module:  ${OUTPUT_DIR}/if_rge.ko"
-echo "if_rge package: ${package}"
+echo "if_rge package: ${output_package}"
