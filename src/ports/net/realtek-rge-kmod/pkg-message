@@ -1,0 +1,18 @@
+[
+{ type: install
+  message: <<EOM
+Add the following line to /boot/loader.conf:
+
+if_rge_load="YES"
+
+EOM
+},
+{ type: upgrade
+  message: <<EOM
+Add the following line to /boot/loader.conf:
+
+if_rge_load="YES"
+
+EOM
+}
+]

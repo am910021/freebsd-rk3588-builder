@@ -1,0 +1,5 @@
+Kernel module for Realtek RTL8125, RTL8126, and RTL8127 PCI Express
+Ethernet controllers.
+
+This is Adrian Chadd's FreeBSD port of the OpenBSD rge driver with the
+NanoPC-T6 LTS validated updates.
