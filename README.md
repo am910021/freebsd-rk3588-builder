@@ -12,7 +12,7 @@
 
 ```text
 freebsd-rk3588-builder/
-├── boards/                         board 專屬設定、DTB、menu 與檔案覆蓋
+├── boards/                         board 專屬設定、DTS、menu 與檔案覆蓋
 ├── dtb/                            相容用的共用 DTB
 ├── output/                         可交付產物
 │   └── 14.3-p16/                   image、txz 與 checksum
@@ -69,10 +69,10 @@ env ROOTFS_TYPE=zfs ROOT_SIZE_MIB=2048 \
 ZFS pool 預設為 `nanopc_t6`，bootfs 為
 `nanopc_t6/ROOT/default`。可以用 `ZFS_POOL_NAME` 覆蓋 pool 名稱。
 
-每個 board 指定交給 FreeBSD loader 使用的 DTB：
+每個 board 指定衍生自 U-Boot upstream DTS 的 FreeBSD DTS：
 
 ```sh
-FREEBSD_DTB=${BOARD_DIR}/dtb/rk3588-nanopc-t6.dtb
+FREEBSD_DTS=${BOARD_DIR}/dts/rk3588-nanopc-t6-lts-freebsd.dts
 ```
 
 U-Boot control DTB 由 `src/u-boot-2026.07` 的
@@ -175,6 +175,7 @@ work/uboot-2026.07-16m/
 ├── idbloader.img
 ├── u-boot.itb
 ├── uboot-control.dtb
+├── freebsd-runtime.dtb
 ├── logo.bmp
 ├── logo.img
 ├── dualboot.cmd
@@ -193,9 +194,10 @@ U-Boot FIT 內的 control DTB 直接由 U-Boot 2026.07 source 建置。
 Builder 只關閉不參與目標 firmware 的 `TOOLS_MKEFICAPSULE` host tool，
 因此 FreeBSD build host 不需要額外安裝 GnuTLS headers。
 
-`FREEBSD_DTB` 會複製到 ESP；R81 內建 menu 直接載入它，再透過
-`bootefi` 交給 FreeBSD `loader.efi`。Image 仍保留可手動執行的
-`dualboot.scr` 與 DTBO 檔案，但 R81 的預設 `bootcmd` 不會載入它們。
+Board 的 `FREEBSD_DTS` 會 include U-Boot 2026.07 upstream DTS，再加入
+FreeBSD 所需的 crypto、低頻 CPU OPP、USB3-A 與固定 Type-C host 設定。
+建置結果 `freebsd-runtime.dtb` 會複製到 ESP，並由 U-Boot 交給 FreeBSD
+`loader.efi`。Type-C host 設定已直接編入 DTB，不再需要 runtime DTBO。
 
 ### idbloader
 
@@ -308,7 +310,6 @@ Image 內會安裝：
 
 - `/EFI/FreeBSD/loader.efi`
 - `FREEBSD_DTB`
-- `/EFI/overlays.conf` 與 board 指定的 DTBO
 - U-Boot 2026.07 內建 boot menu
 - `if_rge.ko`
 - `growfs_enable="YES"`

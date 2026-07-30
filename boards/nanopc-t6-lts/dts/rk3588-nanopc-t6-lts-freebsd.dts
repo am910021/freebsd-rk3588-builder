@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: BSD-2-Clause
+
+/dts-v1/;
+
+#include "rk3588-nanopc-t6-lts.dts"
+
+/ {
+	crypto@fe370000 {
+		compatible = "rockchip,rk3588-crypto";
+		reg = <0x0 0xfe370000 0x0 0x2000>;
+		interrupts = <GIC_SPI 209 IRQ_TYPE_LEVEL_HIGH 0>;
+		clocks = <&scmi_clk SCMI_CRYPTO_CORE>,
+			 <&scmi_clk SCMI_ACLK_SECURE_NS>,
+			 <&scmi_clk SCMI_HCLK_SECURE_NS>;
+		clock-names = "core", "aclk", "hclk";
+		resets = <&scmi_reset SCMI_SRST_CRYPTO_CORE>;
+		reset-names = "core";
+		status = "okay";
+	};
+};
+
+&u2phy0_otg {
+	phy-supply = <&vbus5v0_usb>;
+};
+
+&usb_host1_xhci {
+	extcon = <&u2phy0>;
+};
+
+&usb_host0_xhci {
+	dr_mode = "host";
+};
+
+&vbus5v0_typec {
+	regulator-always-on;
+};
+
+&cluster0_opp_table {
+	opp-408000000 {
+		opp-hz = /bits/ 64 <408000000>;
+		opp-microvolt = <675000 675000 950000>;
+		clock-latency-ns = <40000>;
+		opp-suspend;
+	};
+
+	opp-600000000 {
+		opp-hz = /bits/ 64 <600000000>;
+		opp-microvolt = <675000 675000 950000>;
+		clock-latency-ns = <40000>;
+	};
+
+	opp-816000000 {
+		opp-hz = /bits/ 64 <816000000>;
+		opp-microvolt = <675000 675000 950000>;
+		clock-latency-ns = <40000>;
+	};
+};
+
+&cluster1_opp_table {
+	opp-408000000 {
+		opp-hz = /bits/ 64 <408000000>;
+		opp-microvolt = <675000 675000 1000000>;
+		clock-latency-ns = <40000>;
+		opp-suspend;
+	};
+
+	opp-600000000 {
+		opp-hz = /bits/ 64 <600000000>;
+		opp-microvolt = <675000 675000 1000000>;
+		clock-latency-ns = <40000>;
+	};
+
+	opp-816000000 {
+		opp-hz = /bits/ 64 <816000000>;
+		opp-microvolt = <675000 675000 1000000>;
+		clock-latency-ns = <40000>;
+	};
+
+	opp-1008000000 {
+		opp-hz = /bits/ 64 <1008000000>;
+		opp-microvolt = <675000 675000 1000000>;
+		clock-latency-ns = <40000>;
+	};
+};
+
+&cluster2_opp_table {
+	opp-408000000 {
+		opp-hz = /bits/ 64 <408000000>;
+		opp-microvolt = <675000 675000 1000000>;
+		clock-latency-ns = <40000>;
+		opp-suspend;
+	};
+
+	opp-600000000 {
+		opp-hz = /bits/ 64 <600000000>;
+		opp-microvolt = <675000 675000 1000000>;
+		clock-latency-ns = <40000>;
+	};
+
+	opp-816000000 {
+		opp-hz = /bits/ 64 <816000000>;
+		opp-microvolt = <675000 675000 1000000>;
+		clock-latency-ns = <40000>;
+	};
+
+	opp-1008000000 {
+		opp-hz = /bits/ 64 <1008000000>;
+		opp-microvolt = <675000 675000 1000000>;
+		clock-latency-ns = <40000>;
+	};
+};

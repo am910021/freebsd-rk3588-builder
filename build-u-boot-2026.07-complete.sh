@@ -44,7 +44,7 @@ case "${UBOOT_LOGO_ENABLE}" in
 esac
 
 for file in "${UBOOT_BL31}" "${UBOOT_ROCKCHIP_TPL}" "${MENU_CMD}" \
-    "${LOGO_BMP}"; do
+    "${LOGO_BMP}" "${FREEBSD_DTS}"; do
 	[ -f "${file}" ] || fail "missing input: ${file}"
 done
 [ -d "${UBOOT_SRC_DIR}" ] || fail "missing source: ${UBOOT_SRC_DIR}"
@@ -101,6 +101,17 @@ for file in idbloader.img u-boot.itb u-boot.bin u-boot.dtb .config; do
 	[ -f "${BUILD_DIR}/${file}" ] ||
 	    fail "build did not produce: ${file}"
 done
+
+FREEBSD_DTS_PP=${WORK}/rk3588-nanopc-t6-lts-freebsd.pp.dts
+"${CROSS_COMPILE}gcc" -E -nostdinc -undef -D__DTS__ \
+    -x assembler-with-cpp \
+    -I"${UBOOT_SRC_DIR}/dts/upstream/src/arm64/rockchip" \
+    -I"${UBOOT_SRC_DIR}/dts/upstream/src/arm64" \
+    -I"${UBOOT_SRC_DIR}/dts/upstream/src" \
+    -I"${UBOOT_SRC_DIR}/dts/upstream/include" \
+    "${FREEBSD_DTS}" > "${FREEBSD_DTS_PP}"
+"${BUILD_DIR}/scripts/dtc/dtc" -@ -I dts -O dtb \
+    -o "${OUT}/freebsd-runtime.dtb" "${FREEBSD_DTS_PP}"
 
 cp -p "${BUILD_DIR}/idbloader.img" "${OUT}/idbloader.img"
 cp -p "${BUILD_DIR}/u-boot.itb" "${OUT}/u-boot.itb"
@@ -198,6 +209,7 @@ Jobs: ${JOBS}
 Logo: ${LOGO_BMP}
 Logo enabled: ${UBOOT_LOGO_ENABLE}
 ESP menu: ${MENU_CMD}
+FreeBSD DTS: ${FREEBSD_DTS}
 Firmware image: nanopc-t6-lts-uboot-${FIRMWARE_MIB}m.bin
 Firmware size: ${FIRMWARE_MIB} MiB
 EOF
@@ -205,7 +217,8 @@ EOF
 (
 	cd "${OUT}"
 	sha256 idbloader.img u-boot.itb u-boot.bin u-boot.config \
-	    uboot-control.dtb logo.bmp logo.img dualboot.cmd dualboot.scr \
+	    uboot-control.dtb freebsd-runtime.dtb \
+	    logo.bmp logo.img dualboot.cmd dualboot.scr \
 	    nanopc-t6-lts-uboot-${FIRMWARE_MIB}m.bin \
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt > SHA256SUMS
 )
