@@ -64,7 +64,7 @@ freebsd-rk3588-builder/
 │   └── 14.3-p16/                   image、txz 與 checksum
 ├── src/
 │   ├── freebsd-src/
-│   ├── if_rge_freebsd/
+│   ├── ports/
 │   ├── rkbin/
 │   └── u-boot-2026.07/
 ├── work/                           可重建的 object 與中間產物
@@ -133,9 +133,11 @@ Git 來源可以使用 branch，或用 commit 固定版本：
 FREEBSD_URL=https://github.com/am910021/freebsd-src.git
 UBOOT_URL=https://github.com/am910021/u-boot.git
 RKBIN_URL=https://github.com/am910021/rkbin.git
-IF_RGE_URL=https://github.com/am910021/if_rge_freebsd.git
+PORTS_URL=https://github.com/am910021/rk3588-ports.git
 UBOOT_BRANCH=yuri/rk3588
 UBOOT_COMMIT=
+PORTS_BRANCH=main
+PORTS_COMMIT=
 RKBIN_BRANCH=master
 RKBIN_COMMIT=
 ```
@@ -178,8 +180,9 @@ FREEBSD_OBJ=${FREEBSD_OBJ_ROOT}/arm64.aarch64
 KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 ```
 
-`build-if-rge-freebsd.sh` 會直接使用同一套 kernel object 與 arm64
-toolchain。
+`build-if-rge-freebsd.sh` 會用同一套 kernel object 與 arm64 toolchain
+建置 `src/ports/net/realtek-rge-kmod`。此 port 透過 `GH_TAGNAME` 固定
+上游版本，不再需要另外 checkout if_rge 原始碼。
 
 ## 建立 U-Boot
 

@@ -68,7 +68,7 @@ freebsd-rk3588-builder/
 |   `-- 14.3-p16/                   Images, txz archives, and checksums
 |-- src/
 |   |-- freebsd-src/
-|   |-- if_rge_freebsd/
+|   |-- ports/
 |   |-- rkbin/
 |   `-- u-boot-2026.07/
 |-- work/                           Rebuildable objects and intermediate artifacts
@@ -139,9 +139,11 @@ Git sources can follow a branch or be pinned to a commit:
 FREEBSD_URL=https://github.com/am910021/freebsd-src.git
 UBOOT_URL=https://github.com/am910021/u-boot.git
 RKBIN_URL=https://github.com/am910021/rkbin.git
-IF_RGE_URL=https://github.com/am910021/if_rge_freebsd.git
+PORTS_URL=https://github.com/am910021/rk3588-ports.git
 UBOOT_BRANCH=yuri/rk3588
 UBOOT_COMMIT=
+PORTS_BRANCH=main
+PORTS_COMMIT=
 RKBIN_BRANCH=master
 RKBIN_COMMIT=
 ```
@@ -184,8 +186,9 @@ FREEBSD_OBJ=${FREEBSD_OBJ_ROOT}/arm64.aarch64
 KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 ```
 
-`build-if-rge-freebsd.sh` directly uses the same kernel objects and arm64
-toolchain.
+`build-if-rge-freebsd.sh` builds `src/ports/net/realtek-rge-kmod` with the
+same kernel objects and arm64 toolchain. The port pins its upstream source
+with `GH_TAGNAME`; no separate if_rge source checkout is needed.
 
 ## Building U-Boot
 

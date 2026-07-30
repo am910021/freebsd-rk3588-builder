@@ -18,8 +18,6 @@ die()
 	exit 1
 }
 
-[ -f "${IF_RGE_SRC_DIR}/src/Makefile" ] ||
-	die "missing if_rge source: ${IF_RGE_SRC_DIR}"
 [ -f "${RGE_PORT_DIR}/Makefile" ] ||
 	die "missing if_rge port: ${RGE_PORT_DIR}"
 [ -d "${FREEBSD_SRC_DIR}/sys" ] ||
@@ -29,18 +27,13 @@ die()
 [ -x "${TOOLBIN}/cc" ] || die "missing arm64 toolchain: ${TOOLBIN}"
 [ -x "${FREEBSD_OBJ}/bin/sh/sh" ] ||
 	die "missing target ABI executable: ${FREEBSD_OBJ}/bin/sh/sh"
-[ -z "$(git -C "${IF_RGE_SRC_DIR}" status --porcelain)" ] ||
-	die "if_rge source has uncommitted changes"
+[ -z "$(git -C "${PORTS_SRC_DIR}" status --porcelain)" ] ||
+	die "ports source has uncommitted changes"
 
 for cmd in make git pkg sha256 readelf mktemp; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
 
-commit=$(git -C "${IF_RGE_SRC_DIR}" rev-parse HEAD)
-port_commit=$(make -C "${RGE_PORT_DIR}" ALLOW_UNSUPPORTED_SYSTEM=yes \
-    -V GH_TAGNAME)
-[ "${commit}" = "${port_commit}" ] ||
-	die "if_rge source ${commit} does not match port ${port_commit}"
 osversion=$(awk '
     $1 == "#define" && $2 == "__FreeBSD_version" { print $3; exit }
 ' "${FREEBSD_SRC_DIR}/sys/sys/param.h")
