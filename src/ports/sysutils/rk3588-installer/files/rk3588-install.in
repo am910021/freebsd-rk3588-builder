@@ -177,6 +177,7 @@ confirm_install()
 	    "ALL DATA on /dev/${target_disk} will be destroyed.\n\n\
 Live root: /dev/${source_disk}\n\
 Target: /dev/${target_disk}\n\
+Boot storage: ${storage}\n\
 Filesystem: ${filesystem}\n\
 Swap: ${SWAP_MIB} MiB\n\
 Firmware area: ${FIRMWARE_MIB} MiB\n\n\
@@ -197,11 +198,35 @@ check_capacity()
 	    die "${target_disk} is too small; at least 1 GiB root space is required"
 }
 
+install_firmware()
+{
+	case "${storage}" in
+	1|2)
+		firmware=${PAYLOAD}/firmware.bin
+		reserve=$((FIRMWARE_MIB * 1024 * 1024))
+		[ -f "${firmware}" ] || die "missing ${firmware}"
+		[ "$(stat -f %z "${firmware}")" -eq "${reserve}" ] ||
+		    die "${firmware} must be exactly ${FIRMWARE_MIB} MiB"
+
+		echo "Writing ${FIRMWARE_MIB} MiB RK3588 firmware to /dev/${target_disk}"
+		dd if="${firmware}" of="/dev/${target_disk}" bs=1m \
+		    count="${FIRMWARE_MIB}" conv=notrunc,fsync status=none
+		cmp -s -n "${reserve}" "${firmware}" "/dev/${target_disk}" ||
+		    die "firmware readback verification failed"
+		echo "Firmware readback verification passed"
+		;;
+	9)
+		echo "SPI boot detected; target firmware area will not be written"
+		;;
+	esac
+}
+
 partition_target()
 {
 	if gpart show "${target_disk}" >/dev/null 2>&1; then
 		gpart destroy -F "${target_disk}"
 	fi
+	install_firmware
 	gpart create -s gpt "${target_disk}"
 	firmware_start=$(gpart show -p "${target_disk}" |
 	    awk '$3 == "-" && $4 == "free" { print $1; exit }')
@@ -222,6 +247,13 @@ partition_target()
 	fi
 	gpart add -b "${root_start}" -t "freebsd-${filesystem}" \
 	    -l freebsd_root "${target_disk}"
+	if [ "${storage}" = 1 ] || [ "${storage}" = 2 ]; then
+		offset=$((64 * 512))
+		cmp -s -i "${offset}:${offset}" -n "$((reserve - offset))" \
+		    "${firmware}" "/dev/${target_disk}" ||
+		    die "firmware verification after GPT creation failed"
+		echo "Firmware verification after GPT creation passed"
+	fi
 }
 
 prepare_bsdinstall()
@@ -275,27 +307,6 @@ mount_target()
 	fi
 }
 
-write_component()
-{
-	file=$1
-	lba=$2
-	limit=$3
-	size=$(stat -f %z "${file}")
-	offset=$((lba * 512))
-
-	[ $((size % 512)) -eq 0 ] ||
-	    die "${file} is not sector aligned"
-	[ $((offset + size)) -le "${limit}" ] ||
-	    die "${file} exceeds its reserved region"
-
-	dd if="${file}" of="/dev/${target_disk}" bs=512 seek="${lba}" \
-	    conv=notrunc,sync status=none
-	dd if="/dev/${target_disk}" bs=512 skip="${lba}" \
-	    count=$((size / 512)) status=none |
-	    cmp -s "${file}" - ||
-	    die "verification failed for ${file}"
-}
-
 configure_target()
 {
 	mkdir -p "${BSDINSTALL_CHROOT}/boot/efi/dtb" \
@@ -335,20 +346,6 @@ configure_target()
 		    vfs.root.mountfrom="zfs:${ZFS_POOL_NAME}/ROOT/default"
 		sysrc -q -R "${BSDINSTALL_CHROOT}" zfs_enable=YES
 	fi
-
-	storage=$(boot_storage) ||
-	    die "cannot read /chosen/rockchip,boot-storage"
-	case "${storage}" in
-	1|2)
-		reserve=$((FIRMWARE_MIB * 1024 * 1024))
-		write_component "${PAYLOAD}/idbloader.img" 64 $((0x4000 * 512))
-		write_component "${PAYLOAD}/u-boot.itb" 16384 \
-		    $((0x6000 * 512))
-		write_component "${PAYLOAD}/logo.img" 24576 "${reserve}"
-		;;
-	9) ;;
-	*) die "unsupported boot storage: ${storage}" ;;
-	esac
 }
 
 configure_freebsd()
@@ -399,6 +396,13 @@ install_system()
 	choose_swap
 	calculate_layout
 	check_capacity
+	storage=$(boot_storage) ||
+	    die "cannot read /chosen/rockchip,boot-storage"
+	case "${storage}" in
+	1|2|9) ;;
+	*) die "unsupported boot storage: ${storage}" ;;
+	esac
+	echo "Detected boot storage ${storage}"
 	confirm_install
 
 	esp_mounted=0

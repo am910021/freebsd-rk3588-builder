@@ -72,7 +72,6 @@ UBOOT_BIN=${UBOOT_DIR}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin
 IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb
 BOOTMENU_FILE=${UBOOT_DIR}/bootmenu.env
-LOGO_IMG=${UBOOT_DIR}/logo.img
 MANIFEST_SCRIPT=${FREEBSD_SRC_DIR}/release/scripts/make-manifest.sh
 
 die()
@@ -163,7 +162,7 @@ for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${RGE_PKG}" "${UBOOT_BIN}" \
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
 if [ "${INSTALLER}" = "YES" ]; then
-	for file in "${LOGO_IMG}" "${MANIFEST_SCRIPT}" \
+	for file in "${MANIFEST_SCRIPT}" \
 	    "${RK3588_INSTALLER_PORT_DIR}/Makefile" \
 	    "${RK3588_INSTALLER_PORT_DIR}/files/rk3588-install.in"; do
 		[ -f "${file}" ] || die "missing installer input: ${file}"
@@ -264,9 +263,7 @@ if [ "${INSTALLER}" = "YES" ]; then
 		cd "${distdir}"
 		sh "${MANIFEST_SCRIPT}" base.txz kernel.txz > MANIFEST
 	)
-	cp -p "${IDBLOADER}" "${payload}/idbloader.img"
-	cp -p "${UBOOT_ITB}" "${payload}/u-boot.itb"
-	cp -p "${LOGO_IMG}" "${payload}/logo.img"
+	cp -p "${UBOOT_BIN}" "${payload}/firmware.bin"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
 	cp -p "${BOOTMENU_FILE}" "${payload}/bootmenu.env"
 	cat > "${payload}/config" <<EOF
@@ -275,11 +272,6 @@ ESP_MIB=${ESP_SIZE_MIB}
 ROOT_LABEL=${INSTALL_TARGET_ROOT_LABEL}
 ZFS_POOL_NAME=${ZFS_POOL_NAME}
 EOF
-	cat > "${root_mnt}/etc/rc.local" <<'EOF'
-#!/bin/sh
-/usr/local/sbin/rk3588-install launch
-EOF
-	chmod 0555 "${root_mnt}/etc/rc.local"
 fi
 
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
