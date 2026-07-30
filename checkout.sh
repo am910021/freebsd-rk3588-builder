@@ -80,6 +80,7 @@ check_repo "${FREEBSD_SRC_DIR}"
 check_repo "${UBOOT_SRC_DIR}"
 check_repo "${RKBIN_SRC_DIR}"
 check_repo "${IF_RGE_SRC_DIR}"
+check_repo "${PORTS_SRC_DIR}"
 
 sync_repo "${FREEBSD_SRC_DIR}" "${FREEBSD_URL}" \
 	"$FREEBSD_BRANCH" "$FREEBSD_COMMIT"
@@ -89,3 +90,5 @@ sync_repo "${RKBIN_SRC_DIR}" "${RKBIN_URL}" \
 	"$RKBIN_BRANCH" "$RKBIN_COMMIT"
 sync_repo "${IF_RGE_SRC_DIR}" "${IF_RGE_URL}" \
 	"$IF_RGE_BRANCH" "$IF_RGE_COMMIT"
+sync_repo "${PORTS_SRC_DIR}" "${PORTS_URL}" \
+	"$PORTS_BRANCH" "$PORTS_COMMIT"
