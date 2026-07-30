@@ -109,7 +109,7 @@ post_install()
 	    "${target}/boot/modules"
 	cp -p "${PAYLOAD}/freebsd.dtb" "${target}/boot/efi/dtb/freebsd.dtb"
 	cp -p "${PAYLOAD}/bootmenu.env" \
-	    "${target}/boot/efi/EFI/bootmenu.env"
+	    "${target}/boot/efi/bootmenu.env"
 	cp -p /boot/modules/if_rge.ko "${target}/boot/modules/if_rge.ko"
 
 	for setting in \

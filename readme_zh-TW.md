@@ -215,7 +215,7 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 
 `work/uboot-latest` 會指向最新完成的 bundle。
 
-映像檔會將 `bootmenu.env` 安裝為 `/EFI/bootmenu.env`。U-Boot 只會匯入
+映像檔會將 `bootmenu.env` 安裝為 `/bootmenu.env`。U-Boot 只會匯入
 `bootmenu_title`、`bootmenu_delay` 與 `bootmenu_0` 到 `bootmenu_9`，
 並依序嘗試 `mmc1:1`、`mmc0:1`。檔案不存在或格式錯誤時會使用內建的
 FreeBSD/CLI 安全選單。

@@ -173,7 +173,7 @@ binary = (out / "u-boot.bin").read_bytes()
 for marker in (
     binary_marker,
     b"bootmenu_delay=3",
-    b"bootmenu_config=/EFI/bootmenu.env",
+    b"bootmenu_config=/bootmenu.env",
     b"logo_enable=" + logo_enable,
     b"load_bootmenu=",
     b"show_logo=",
