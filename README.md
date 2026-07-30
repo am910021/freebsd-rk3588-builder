@@ -83,8 +83,11 @@ DTB。
 Git 來源可以使用 branch，或用 commit 固定版本：
 
 ```sh
+FREEBSD_URL=git@git.lo:yuri/freebsd-src.git
 UBOOT_URL=git@git.lo:yuri/u-boot.git
-UBOOT_BRANCH=yuri/nanopc-t6_lts
+RKBIN_URL=git@git.lo:yuri/rkbin.git
+IF_RGE_URL=git@git.lo:yuri/if_rge_freebsd.git
+UBOOT_BRANCH=yuri/rk3588
 UBOOT_COMMIT=
 RKBIN_BRANCH=master
 RKBIN_COMMIT=
@@ -101,8 +104,8 @@ BOARD=nanopc-t6-lts ./checkout.sh
 ```
 
 如果任何既有 source repository 有未提交修改，`checkout.sh` 會在更新
-任何 repository 前終止。未選擇 board 且未設定 `UBOOT_BRANCH` 或
-`UBOOT_COMMIT` 時，只會跳過 U-Boot repository。
+任何 repository 前終止。`BOARD` 只決定板級建置設定，不影響這四個
+source repository 的同步。
 
 ## 輸入檔案
 

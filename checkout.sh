@@ -77,20 +77,15 @@ mkdir -p "${WORK_ROOT}" "${OUTPUT_ROOT}" "${SRC_ROOT}"
 
 # Check every existing repository before changing any of them.
 check_repo "${FREEBSD_SRC_DIR}"
-[ -z "${UBOOT_BRANCH}${UBOOT_COMMIT}" ] ||
-	check_repo "${UBOOT_SRC_DIR}"
+check_repo "${UBOOT_SRC_DIR}"
 check_repo "${RKBIN_SRC_DIR}"
 check_repo "${IF_RGE_SRC_DIR}"
 
-sync_repo "${FREEBSD_SRC_DIR}" "$GIT_URL/freebsd-src.git" \
+sync_repo "${FREEBSD_SRC_DIR}" "${FREEBSD_URL}" \
 	"$FREEBSD_BRANCH" "$FREEBSD_COMMIT"
-if [ -n "${UBOOT_BRANCH}${UBOOT_COMMIT}" ]; then
-	sync_repo "${UBOOT_SRC_DIR}" "${UBOOT_URL}" \
-		"$UBOOT_BRANCH" "$UBOOT_COMMIT"
-else
-	echo "Skipping U-Boot checkout: set BOARD, UBOOT_BRANCH, or UBOOT_COMMIT"
-fi
-sync_repo "${RKBIN_SRC_DIR}" "$GIT_URL/rkbin.git" \
+sync_repo "${UBOOT_SRC_DIR}" "${UBOOT_URL}" \
+	"$UBOOT_BRANCH" "$UBOOT_COMMIT"
+sync_repo "${RKBIN_SRC_DIR}" "${RKBIN_URL}" \
 	"$RKBIN_BRANCH" "$RKBIN_COMMIT"
-sync_repo "${IF_RGE_SRC_DIR}" "$GIT_URL/if_rge_freebsd.git" \
+sync_repo "${IF_RGE_SRC_DIR}" "${IF_RGE_URL}" \
 	"$IF_RGE_BRANCH" "$IF_RGE_COMMIT"
