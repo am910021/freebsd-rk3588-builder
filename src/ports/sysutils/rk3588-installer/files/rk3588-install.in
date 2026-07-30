@@ -320,30 +320,27 @@ configure_target()
 		    "${BSDINSTALL_CHROOT}/boot/modules/if_rge.ko"
 	fi
 
-	for setting in \
-	    boot_multicons=YES \
-	    boot_serial=YES \
-	    console=comconsole,efi \
-	    comconsole_speed=1500000 \
-	    hw.rk3588.efi_fdt_highmem=1
-	do
-		sysrc -q -R "${BSDINSTALL_CHROOT}" -f /boot/loader.conf \
-		    "${setting}"
-	done
+	cat >> "${BSDINSTALL_CHROOT}/boot/loader.conf" <<'EOF'
+boot_multicons="YES"
+boot_serial="YES"
+console="comconsole,efi"
+comconsole_speed="1500000"
+hw.rk3588.efi_fdt_highmem="1"
+EOF
 	if [ -f "${BSDINSTALL_CHROOT}/boot/modules/if_rge.ko" ]; then
-		sysrc -q -R "${BSDINSTALL_CHROOT}" -f /boot/loader.conf \
-		    if_rge_load=YES
-		sysrc -q -R "${BSDINSTALL_CHROOT}" -f /boot/loader.conf \
-		    if_rge_name=/boot/modules/if_rge.ko
+		cat >> "${BSDINSTALL_CHROOT}/boot/loader.conf" <<'EOF'
+if_rge_load="YES"
+if_rge_name="/boot/modules/if_rge.ko"
+EOF
 	fi
 	if [ "${filesystem}" = zfs ]; then
 		mkdir -p "${BSDINSTALL_CHROOT}/boot/zfs"
 		zpool set cachefile="${BSDINSTALL_CHROOT}/boot/zfs/zpool.cache" \
 		    "${ZFS_POOL_NAME}"
-		sysrc -q -R "${BSDINSTALL_CHROOT}" -f /boot/loader.conf \
-		    zfs_load=YES
-		sysrc -q -R "${BSDINSTALL_CHROOT}" -f /boot/loader.conf \
-		    vfs.root.mountfrom="zfs:${ZFS_POOL_NAME}/ROOT/default"
+		cat >> "${BSDINSTALL_CHROOT}/boot/loader.conf" <<EOF
+zfs_load="YES"
+vfs.root.mountfrom="zfs:${ZFS_POOL_NAME}/ROOT/default"
+EOF
 		sysrc -q -R "${BSDINSTALL_CHROOT}" zfs_enable=YES
 	fi
 }
