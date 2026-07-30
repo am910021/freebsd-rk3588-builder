@@ -309,16 +309,15 @@ mount_target()
 
 configure_target()
 {
-	mkdir -p "${BSDINSTALL_CHROOT}/boot/efi/dtb" \
-	    "${BSDINSTALL_CHROOT}/boot/modules"
+	mkdir -p "${BSDINSTALL_CHROOT}/boot/efi/dtb"
 	cp -p "${PAYLOAD}/freebsd.dtb" \
 	    "${BSDINSTALL_CHROOT}/boot/efi/dtb/freebsd.dtb"
 	cp -p "${PAYLOAD}/bootmenu.env" \
 	    "${BSDINSTALL_CHROOT}/boot/efi/bootmenu.env"
-	if [ -f /boot/modules/if_rge.ko ]; then
-		cp -p /boot/modules/if_rge.ko \
-		    "${BSDINSTALL_CHROOT}/boot/modules/if_rge.ko"
-	fi
+	[ -f "${PAYLOAD}/if_rge.pkg" ] ||
+	    die "missing ${PAYLOAD}/if_rge.pkg"
+	ASSUME_ALWAYS_YES=yes pkg -r "${BSDINSTALL_CHROOT}" \
+	    add "${PAYLOAD}/if_rge.pkg"
 
 	cat >> "${BSDINSTALL_CHROOT}/boot/loader.conf" <<'EOF'
 boot_multicons="YES"
@@ -326,13 +325,9 @@ boot_serial="YES"
 console="comconsole,efi"
 comconsole_speed="1500000"
 hw.rk3588.efi_fdt_highmem="1"
-EOF
-	if [ -f "${BSDINSTALL_CHROOT}/boot/modules/if_rge.ko" ]; then
-		cat >> "${BSDINSTALL_CHROOT}/boot/loader.conf" <<'EOF'
 if_rge_load="YES"
 if_rge_name="/boot/modules/if_rge.ko"
 EOF
-	fi
 	if [ "${filesystem}" = zfs ]; then
 		mkdir -p "${BSDINSTALL_CHROOT}/boot/zfs"
 		zpool set cachefile="${BSDINSTALL_CHROOT}/boot/zfs/zpool.cache" \

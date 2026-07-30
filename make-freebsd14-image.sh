@@ -264,6 +264,7 @@ if [ "${INSTALLER}" = "YES" ]; then
 		sh "${MANIFEST_SCRIPT}" base.txz kernel.txz > MANIFEST
 	)
 	cp -p "${UBOOT_BIN}" "${payload}/firmware.bin"
+	cp -p "${RGE_PKG}" "${payload}/if_rge.pkg"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
 	cp -p "${BOOTMENU_FILE}" "${payload}/bootmenu.env"
 	cat > "${payload}/config" <<EOF
