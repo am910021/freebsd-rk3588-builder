@@ -81,6 +81,15 @@ die()
 	exit 1
 }
 
+partition_uuid()
+{
+	partition_provider=${1}p${2}
+	gpart list "$1" | awk -v provider="${partition_provider}" '
+	    $2 == "Name:" { current = $3 }
+	    current == provider && $1 == "rawuuid:" { print $2; exit }
+	'
+}
+
 [ -n "${ROOT_LABEL}" ] || die "ROOT_LABEL is not configured"
 [ -n "${IMAGE_HOSTNAME}" ] || die "IMAGE_HOSTNAME is not configured"
 [ -n "${FREEBSD_DTB_ESP_PATH}" ] ||
@@ -181,7 +190,7 @@ if [ "${INSTALLER}" = "YES" ]; then
 fi
 [ ! -e "${OUT}" ] || die "output already exists: ${OUT}"
 
-for cmd in mdconfig gpart newfs newfs_msdos mount umount tar chflags \
+for cmd in awk mdconfig gpart newfs newfs_msdos mount umount tar chflags \
     truncate dd mktemp sha256 python3 fsck_msdosfs fsck_ufs pkg; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
@@ -220,6 +229,16 @@ if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
 fi
 gpart add -b "${ROOT_START}" -s "${ROOT_SECTORS}" -t "freebsd-${ROOTFS_TYPE}" \
     -l freebsd_root "${md}"
+
+esp_uuid=$(partition_uuid "${md}" 1)
+root_uuid=$(partition_uuid "${md}" "${ROOT_PARTITION}")
+[ -n "${esp_uuid}" ] || die "cannot determine ESP partition GUID"
+[ -n "${root_uuid}" ] || die "cannot determine root partition GUID"
+swap_uuid=
+if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
+	swap_uuid=$(partition_uuid "${md}" 2)
+	[ -n "${swap_uuid}" ] || die "cannot determine swap partition GUID"
+fi
 
 echo "== Installing FreeBSD ${FREEBSD_OBJ_VERSION} root filesystem =="
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
@@ -265,17 +284,17 @@ EOF
 fi
 
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
-	printf '/dev/ufs/%s\t/\t\tufs\trw,noatime\t\t1 1\n' \
-	    "${ROOT_LABEL}" > "${root_mnt}/etc/fstab"
+	printf '/dev/gptid/%s\t/\t\tufs\trw,noatime\t\t1 1\n' \
+	    "${root_uuid}" > "${root_mnt}/etc/fstab"
 else
 	: > "${root_mnt}/etc/fstab"
 fi
-cat >> "${root_mnt}/etc/fstab" <<'EOF'
-/dev/msdosfs/EFI		/boot/efi	msdosfs	rw,noatime,noauto	0 0
+cat >> "${root_mnt}/etc/fstab" <<EOF
+/dev/gptid/${esp_uuid}	/boot/efi	msdosfs	rw,noatime,noauto	0 0
 EOF
 if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
-	cat >> "${root_mnt}/etc/fstab" <<'EOF'
-/dev/gpt/growfs_swap		none		swap	sw			0 0
+	cat >> "${root_mnt}/etc/fstab" <<EOF
+/dev/gptid/${swap_uuid}	none		swap	sw			0 0
 EOF
 fi
 cat >> "${root_mnt}/etc/fstab" <<'EOF'
@@ -316,7 +335,11 @@ kern.msgbufsize="1048576"
 if_rge_load="YES"
 if_rge_name="/boot/modules/if_rge.ko"
 EOF
-if [ "${ROOTFS_TYPE}" = "zfs" ]; then
+if [ "${ROOTFS_TYPE}" = "ufs" ]; then
+	cat >> "${root_mnt}/boot/loader.conf" <<EOF
+vfs.root.mountfrom="ufs:/dev/gptid/${root_uuid}"
+EOF
+else
 	cat >> "${root_mnt}/boot/loader.conf" <<EOF
 kern.geom.label.disk_ident.enable="0"
 zfs_load="YES"
@@ -346,9 +369,15 @@ idbloader.img: ${idb_sha}
 u-boot.itb: ${uboot_sha}
 FreeBSD DTB: ${dtb_sha}
 logo.bmp: ${logo_sha}
+ESP partition GUID: ${esp_uuid}
+Root partition GUID: ${root_uuid}
 Root filesystem: ${ROOTFS_TYPE}
 Installer image: ${INSTALLER}
 EOF
+if [ -n "${swap_uuid}" ]; then
+	echo "Swap partition GUID: ${swap_uuid}" \
+	    >> "${root_mnt}/etc/${BOARD}-image-build.txt"
+fi
 
 sync
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then

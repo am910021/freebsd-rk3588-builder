@@ -342,6 +342,10 @@ Or explicitly specify the txz archives and output image:
 Both `build-u-boot-2026.07-complete.sh` and the image builder use
 `FIRMWARE_MIB` from `builder.conf`; it does not need to be passed separately.
 
+The image builder and `rk3588-install` generate new GPT partition GUIDs and
+use `/dev/gptid/<GUID>` for UFS root, ESP, and swap references. Filesystem and
+GPT labels remain descriptive only, so duplicate labels cannot redirect boot.
+
 Default image layout:
 
 ```text

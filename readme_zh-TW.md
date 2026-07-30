@@ -334,6 +334,10 @@ output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg.sha256
 `build-u-boot-2026.07-complete.sh` 與 image builder 都使用
 `builder.conf` 的 `FIRMWARE_MIB`，不需分別傳入。
 
+image builder 與 `rk3588-install` 會產生新的 GPT partition GUID，並以
+`/dev/gptid/<GUID>` 指定 UFS root、ESP 與 swap。filesystem 與 GPT label
+只保留作辨識，不再因同名 label 導向錯誤磁碟。
+
 預設 image layout：
 
 ```text
