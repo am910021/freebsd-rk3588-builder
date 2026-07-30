@@ -18,6 +18,7 @@ STAMP=${STAMP:-$(date +%Y%m%d-%H%M%S)}
 LOGO_BMP=${LOGO_BMP:-${IMAGE_LOGO_BMP}}
 ROOTFS_TYPE=${ROOTFS_TYPE:-ufs}
 INSTALLER=${INSTALLER:-NO}
+INSTALL_TARGET_ROOT_LABEL=${ROOT_LABEL}
 ROOTFS_SUFFIX=
 if [ "${ROOTFS_TYPE}" = "zfs" ]; then
 	ROOTFS_SUFFIX=-zfs
@@ -30,6 +31,7 @@ YES)
 		exit 1
 	    }
 	SWAP_SIZE_MIB=0
+	ROOT_LABEL=${ROOT_LABEL}_installer
 	if [ "${ROOT_SIZE_MIB}" -lt 1536 ]; then
 		ROOT_SIZE_MIB=1536
 	fi
@@ -71,7 +73,6 @@ IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb
 BOOTMENU_FILE=${UBOOT_DIR}/bootmenu.env
 LOGO_IMG=${UBOOT_DIR}/logo.img
-INSTALLER_SCRIPT=${BOARD_DIR}/installer/rk3588-install
 MANIFEST_SCRIPT=${FREEBSD_SRC_DIR}/release/scripts/make-manifest.sh
 
 die()
@@ -162,7 +163,9 @@ for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${RGE_TXZ}" "${UBOOT_BIN}" \
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
 if [ "${INSTALLER}" = "YES" ]; then
-	for file in "${LOGO_IMG}" "${INSTALLER_SCRIPT}" "${MANIFEST_SCRIPT}"; do
+	for file in "${LOGO_IMG}" "${MANIFEST_SCRIPT}" \
+	    "${RK3588_INSTALLER_PORT_DIR}/Makefile" \
+	    "${RK3588_INSTALLER_PORT_DIR}/files/rk3588-install.in"; do
 		[ -f "${file}" ] || die "missing installer input: ${file}"
 	done
 fi
@@ -176,6 +179,12 @@ if [ "${ROOTFS_TYPE}" = "zfs" ]; then
 	for cmd in makefs zdb; do
 		command -v "${cmd}" >/dev/null 2>&1 ||
 		    die "missing command: ${cmd}"
+	done
+fi
+if [ "${INSTALLER}" = "YES" ]; then
+	for cmd in make pkg; do
+		command -v "${cmd}" >/dev/null 2>&1 ||
+		    die "missing installer command: ${cmd}"
 	done
 fi
 
@@ -193,6 +202,22 @@ mkdir -p "$(dirname "${OUT}")"
 root_mnt="${WORK}/root"
 esp_mnt="${WORK}/esp"
 mkdir -p "${root_mnt}" "${esp_mnt}"
+
+installer_pkg=
+if [ "${INSTALLER}" = "YES" ]; then
+	installer_port_work="${WORK}/rk3588-installer-port"
+	make -C "${RK3588_INSTALLER_PORT_DIR}" -DBATCH \
+	    ALLOW_UNSUPPORTED_SYSTEM=yes \
+	    WRKDIR="${installer_port_work}" package
+	for candidate in "${installer_port_work}"/pkg/rk3588-installer-*.pkg; do
+		[ -f "${candidate}" ] || continue
+		[ -z "${installer_pkg}" ] ||
+		    die "multiple rk3588-installer packages produced"
+		installer_pkg=${candidate}
+	done
+	[ -n "${installer_pkg}" ] ||
+	    die "rk3588-installer package was not produced"
+fi
 
 echo "== Creating GPT image =="
 truncate -s $((TOTAL_SECTORS * 512)) "${OUT}"
@@ -230,9 +255,9 @@ touch "${root_mnt}/firstboot"
 if [ "${INSTALLER}" = "YES" ]; then
 	distdir="${root_mnt}/usr/freebsd-dist"
 	payload="${root_mnt}/usr/local/share/rk3588-installer"
+	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${installer_pkg}"
 	mkdir -p "${distdir}" "${payload}" \
-	    "${root_mnt}/usr/local/sbin" \
-	    "${root_mnt}/usr/libexec/bsdinstall"
+	    "${root_mnt}/usr/local/sbin"
 	cp -p "${BASE_TXZ}" "${distdir}/base.txz"
 	cp -p "${KERNEL_TXZ}" "${distdir}/kernel.txz"
 	(
@@ -244,13 +269,12 @@ if [ "${INSTALLER}" = "YES" ]; then
 	cp -p "${LOGO_IMG}" "${payload}/logo.img"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
 	cp -p "${BOOTMENU_FILE}" "${payload}/bootmenu.env"
-	printf 'FIRMWARE_MIB=%s\n' "${FIRMWARE_MIB}" \
-	    > "${payload}/config"
-	cp -p "${INSTALLER_SCRIPT}" \
-	    "${root_mnt}/usr/local/sbin/rk3588-install"
-	chmod 0555 "${root_mnt}/usr/local/sbin/rk3588-install"
-	ln -sf /usr/local/sbin/rk3588-install \
-	    "${root_mnt}/usr/libexec/bsdinstall/local.post-configure"
+	cat > "${payload}/config" <<EOF
+FIRMWARE_MIB=${FIRMWARE_MIB}
+ESP_MIB=${ESP_SIZE_MIB}
+ROOT_LABEL=${INSTALL_TARGET_ROOT_LABEL}
+ZFS_POOL_NAME=${ZFS_POOL_NAME}
+EOF
 	cat > "${root_mnt}/etc/rc.local" <<'EOF'
 #!/bin/sh
 /usr/local/sbin/rk3588-install launch
