@@ -83,10 +83,10 @@ DTB。
 Git 來源可以使用 branch，或用 commit 固定版本：
 
 ```sh
-FREEBSD_URL=git@git.lo:yuri/freebsd-src.git
-UBOOT_URL=git@git.lo:yuri/u-boot.git
-RKBIN_URL=git@git.lo:yuri/rkbin.git
-IF_RGE_URL=git@git.lo:yuri/if_rge_freebsd.git
+FREEBSD_URL=https://github.com/am910021/freebsd-src.git
+UBOOT_URL=https://github.com/am910021/u-boot.git
+RKBIN_URL=https://github.com/am910021/rkbin.git
+IF_RGE_URL=https://github.com/am910021/if_rge_freebsd.git
 UBOOT_BRANCH=yuri/rk3588
 UBOOT_COMMIT=
 RKBIN_BRANCH=master

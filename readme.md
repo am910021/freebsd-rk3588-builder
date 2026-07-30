@@ -87,10 +87,10 @@ The U-Boot control DTB is built from `nanopc-t6-rk3588_defconfig` in
 Git sources can follow a branch or be pinned to a commit:
 
 ```sh
-FREEBSD_URL=git@git.lo:yuri/freebsd-src.git
-UBOOT_URL=git@git.lo:yuri/u-boot.git
-RKBIN_URL=git@git.lo:yuri/rkbin.git
-IF_RGE_URL=git@git.lo:yuri/if_rge_freebsd.git
+FREEBSD_URL=https://github.com/am910021/freebsd-src.git
+UBOOT_URL=https://github.com/am910021/u-boot.git
+RKBIN_URL=https://github.com/am910021/rkbin.git
+IF_RGE_URL=https://github.com/am910021/if_rge_freebsd.git
 UBOOT_BRANCH=yuri/rk3588
 UBOOT_COMMIT=
 RKBIN_BRANCH=master
