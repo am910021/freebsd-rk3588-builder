@@ -49,8 +49,7 @@ esac
 UBOOT_BIN=${UBOOT_DIR}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin
 IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb
-DUALBOOT_CMD=${UBOOT_DIR}/dualboot.cmd
-DUALBOOT_SCR=${UBOOT_DIR}/dualboot.scr
+BOOTMENU_FILE=${UBOOT_DIR}/bootmenu.env
 
 die()
 {
@@ -135,14 +134,14 @@ cleanup()
 }
 
 for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${RGE_TXZ}" "${UBOOT_BIN}" \
-    "${IDBLOADER}" "${UBOOT_ITB}" "${DUALBOOT_CMD}" "${DUALBOOT_SCR}" \
+    "${IDBLOADER}" "${UBOOT_ITB}" "${BOOTMENU_FILE}" \
     "${FREEBSD_DTB}" "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
 [ ! -e "${OUT}" ] || die "output already exists: ${OUT}"
 
 for cmd in mdconfig gpart newfs newfs_msdos mount umount tar chflags \
-    truncate dd mktemp sha256 mkimage python3 fsck_msdosfs fsck_ufs; do
+    truncate dd mktemp sha256 python3 fsck_msdosfs fsck_ufs; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
 if [ "${ROOTFS_TYPE}" = "zfs" ]; then
@@ -340,11 +339,7 @@ printf 'fdt_overlays=%s\n' "${UBOOT_FDT_OVERLAYS}" \
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/BOOT/BOOTAA64.EFI"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/FreeBSD/loader.efi"
 cp -p "${FREEBSD_DTB}" "${esp_mnt}${FREEBSD_DTB_ESP_PATH}"
-
-cp -p "${DUALBOOT_CMD}" "${esp_mnt}/dualboot.cmd"
-cp -p "${DUALBOOT_SCR}" "${esp_mnt}/dualboot.scr"
-cp -p "${DUALBOOT_CMD}" "${esp_mnt}/EFI/dualboot.cmd"
-cp -p "${DUALBOOT_SCR}" "${esp_mnt}/EFI/dualboot.scr"
+cp -p "${BOOTMENU_FILE}" "${esp_mnt}/EFI/bootmenu.env"
 sync
 umount "${esp_mnt}"
 esp_mnt=
@@ -357,7 +352,6 @@ if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 else
 	zdb -l "/dev/${md}p${ROOT_PARTITION}" >/dev/null
 fi
-mkimage -l "${DUALBOOT_SCR}" >/dev/null
 
 python3 - "${OUT}" "${UBOOT_BIN}" <<'PY'
 from pathlib import Path

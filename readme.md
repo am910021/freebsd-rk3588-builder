@@ -212,8 +212,7 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 |-- freebsd-runtime.dtb
 |-- logo.bmp
 |-- logo.img
-|-- dualboot.cmd
-|-- dualboot.scr
+|-- bootmenu.env
 |-- nanopc-t6-lts-uboot-16m.bin
 |-- FIRMWARE-LAYOUT.txt
 |-- BUILD-INFO.txt
@@ -221,6 +220,11 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 ```
 
 `work/uboot-latest` points to the most recently completed bundle.
+
+The image installs `bootmenu.env` as `/EFI/bootmenu.env`. U-Boot imports only
+`bootmenu_title`, `bootmenu_delay`, and `bootmenu_0` through `bootmenu_9`,
+trying `mmc1:1` before `mmc0:1`. If the file is absent or invalid, U-Boot uses
+its built-in FreeBSD/CLI menu.
 
 ### Device Trees
 

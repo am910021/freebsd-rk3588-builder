@@ -47,7 +47,7 @@ case "${UBOOT_LOGO_ENABLE}" in
 		;;
 esac
 
-for file in "${UBOOT_BL31}" "${UBOOT_ROCKCHIP_TPL}" "${MENU_CMD}" \
+for file in "${UBOOT_BL31}" "${UBOOT_ROCKCHIP_TPL}" "${BOOTMENU_ENV}" \
     "${LOGO_BMP}" "${FREEBSD_DTS}"; do
 	[ -f "${file}" ] || fail "missing input: ${file}"
 done
@@ -58,7 +58,6 @@ done
 [ -n "${UBOOT_BINARY_MARKER}" ] ||
     fail "UBOOT_BINARY_MARKER is not configured"
 [ -d "${UBOOT_SRC_DIR}" ] || fail "missing source: ${UBOOT_SRC_DIR}"
-[ -x "${MKIMAGE}" ] || fail "not executable: ${MKIMAGE}"
 for cmd in git gmake mktemp python3 sha256; do
 	command -v "${cmd}" >/dev/null 2>&1 || fail "missing command: ${cmd}"
 done
@@ -136,10 +135,7 @@ cp -p "${BUILD_DIR}/u-boot.bin" "${OUT}/u-boot.bin"
 cp -p "${BUILD_DIR}/u-boot.dtb" "${OUT}/uboot-control.dtb"
 cp -p "${BUILD_DIR}/.config" "${OUT}/u-boot.config"
 cp -p "${LOGO_BMP}" "${OUT}/logo.bmp"
-cp -p "${MENU_CMD}" "${OUT}/dualboot.cmd"
-"${MKIMAGE}" -A arm -T script -C none \
-    -n "${BOARD} FreeBSD U-Boot ${UBOOT_VERSION} menu" \
-    -d "${OUT}/dualboot.cmd" "${OUT}/dualboot.scr" >/dev/null
+cp -p "${BOOTMENU_ENV}" "${OUT}/bootmenu.env"
 
 python3 - "${OUT}" "${FIRMWARE_MIB}" "${UBOOT_LOGO_ENABLE}" \
     "${BOARD}" "${UBOOT_BINARY_MARKER}" <<'PY'
@@ -158,15 +154,28 @@ uboot_offset = 0x4000 * sector
 logo_offset = 0x6000 * sector
 logo_read_size = 0x961 * sector
 
-script = (out / "dualboot.scr").read_bytes()
-if len(script) < 72 or script[68:72] != b"\0\0\0\0":
-    raise SystemExit("dualboot.scr lacks the standard zero terminator")
+menu = (out / "bootmenu.env").read_text(encoding="utf-8").splitlines()
+allowed = {"bootmenu_title", "bootmenu_delay"}
+allowed.update(f"bootmenu_{index}" for index in range(10))
+entries = set()
+for line in menu:
+    line = line.strip()
+    if not line or line.startswith("#"):
+        continue
+    name, separator, _ = line.partition("=")
+    if not separator or name not in allowed:
+        raise SystemExit(f"invalid bootmenu.env line: {line!r}")
+    entries.add(name)
+if "bootmenu_0" not in entries:
+    raise SystemExit("bootmenu.env lacks bootmenu_0")
 
 binary = (out / "u-boot.bin").read_bytes()
 for marker in (
     binary_marker,
     b"bootmenu_delay=3",
+    b"bootmenu_config=/EFI/bootmenu.env",
     b"logo_enable=" + logo_enable,
+    b"load_bootmenu=",
     b"show_logo=",
     b"boot_freebsd=",
     b"rk_boot_storage",
@@ -229,7 +238,7 @@ Cross compile: ${CROSS_COMPILE}
 Jobs: ${JOBS}
 Logo: ${LOGO_BMP}
 Logo enabled: ${UBOOT_LOGO_ENABLE}
-ESP menu: ${MENU_CMD}
+ESP menu: ${BOOTMENU_ENV}
 FreeBSD DTS: ${FREEBSD_DTS}
 Firmware image: ${BOARD}-uboot-${FIRMWARE_MIB}m.bin
 Firmware size: ${FIRMWARE_MIB} MiB
@@ -239,7 +248,7 @@ EOF
 	cd "${OUT}"
 	sha256 idbloader.img u-boot.itb u-boot.bin u-boot.config \
 	    uboot-control.dtb freebsd-runtime.dtb \
-	    logo.bmp logo.img dualboot.cmd dualboot.scr \
+	    logo.bmp logo.img bootmenu.env \
 	    "${BOARD}-uboot-${FIRMWARE_MIB}m.bin" \
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt > SHA256SUMS
 )
