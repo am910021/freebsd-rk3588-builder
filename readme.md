@@ -287,6 +287,12 @@ cd /root/freebsd-rk3588-builder
 ./build-freebsd-release.sh
 ```
 
+Set `NO_CLEAN=YES` to reuse existing world, kernel, and release objects:
+
+```sh
+NO_CLEAN=YES ./build-freebsd-release.sh
+```
+
 The script uses:
 
 - `src/freebsd-src`

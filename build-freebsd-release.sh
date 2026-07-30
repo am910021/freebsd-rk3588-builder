@@ -16,6 +16,12 @@ die()
 	exit 1
 }
 
+case "${NO_CLEAN}" in
+YES) no_clean_make_arg=WITHOUT_CLEAN=yes ;;
+NO) no_clean_make_arg= ;;
+*) die "NO_CLEAN must be YES or NO" ;;
+esac
+
 [ -f "${FREEBSD_SRC_DIR}/Makefile" ] ||
 	die "missing FreeBSD source: ${FREEBSD_SRC_DIR}"
 [ -f "${FREEBSD_SRC_DIR}/sys/arm64/conf/${FREEBSD_KERNCONF}" ] ||
@@ -36,7 +42,8 @@ freebsd_make()
 	    TARGET=arm64 TARGET_ARCH=aarch64 \
 	    KERNCONF="${FREEBSD_KERNCONF}" \
 	    SRCCONF=/dev/null __MAKE_CONF=/dev/null \
-	    WITHOUT_DEBUG_FILES=yes WITHOUT_KERNEL_SYMBOLS=yes "$@"
+	    WITHOUT_DEBUG_FILES=yes WITHOUT_KERNEL_SYMBOLS=yes \
+	    ${no_clean_make_arg} "$@"
 }
 
 release_make()
@@ -47,11 +54,12 @@ release_make()
 	    KERNCONF="${FREEBSD_KERNCONF}" \
 	    SRCCONF=/dev/null __MAKE_CONF=/dev/null \
 	    WITHOUT_DEBUG_FILES=yes WITHOUT_KERNEL_SYMBOLS=yes \
-	    NOPORTS=yes NOSRC=yes NOPKG=yes "$@"
+	    NOPORTS=yes NOSRC=yes NOPKG=yes ${no_clean_make_arg} "$@"
 }
 
 commit=$(git -C "${FREEBSD_SRC_DIR}" rev-parse --short HEAD)
 echo "== Building FreeBSD ${commit} with ${FREEBSD_KERNCONF} =="
+echo "== NO_CLEAN=${NO_CLEAN} =="
 freebsd_make -j"${JOBS}" buildworld buildkernel
 
 echo "== Packaging base.txz and kernel.txz =="

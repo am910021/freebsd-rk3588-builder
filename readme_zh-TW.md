@@ -279,6 +279,12 @@ cd /root/freebsd-rk3588-builder
 ./build-freebsd-release.sh
 ```
 
+設定 `NO_CLEAN=YES` 可沿用既有 world、kernel 與 release objects：
+
+```sh
+NO_CLEAN=YES ./build-freebsd-release.sh
+```
+
 腳本使用：
 
 - `src/freebsd-src`
