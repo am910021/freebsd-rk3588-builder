@@ -327,7 +327,6 @@ EOF
 
 cat > "${root_mnt}/etc/rc.conf" <<EOF
 hostname="${IMAGE_HOSTNAME}"
-ifconfig_DEFAULT="DHCP"
 sshd_enable="YES"
 growfs_enable="YES"
 powerd_enable="YES"
