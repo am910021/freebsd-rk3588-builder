@@ -210,6 +210,7 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 ├── logo.img
 ├── bootmenu.env
 ├── nanopc-t6-lts-uboot-16m.bin
+├── firmware-update.bin
 ├── FIRMWARE-LAYOUT.txt
 ├── BUILD-INFO.txt
 └── SHA256SUMS
@@ -218,9 +219,21 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 `work/uboot-latest` 會指向最新完成的 bundle。
 
 映像檔會將 `bootmenu.env` 安裝為 `/bootmenu.env`。U-Boot 只會匯入
-`bootmenu_title`、`bootmenu_delay` 與 `bootmenu_0` 到 `bootmenu_9`，
-並依序嘗試 `mmc1:1`、`mmc0:1`。檔案不存在或格式錯誤時會使用內建的
-FreeBSD/CLI 安全選單。
+`bootmenu_title` 與 `bootmenu_delay`，再依 eMMC、SD、USB、NVMe、
+SATA/SCSI 順序尋找 `/EFI/FreeBSD/loader.efi` 並動態產生選單。
+`freebsd_default_boot` 指定優先目標；目標不存在時會退回第一個找到的
+loader。
+
+FreeBSD 可在已掛載的 ESP 寫入單一嚴格格式的 `/uboot-env.request`，
+要求變更預設目標，例如：
+
+```text
+freebsd_default_boot=mmc1:1
+```
+
+下次啟動時，U-Boot 會把設定寫入與自身開機來源相同儲存裝置上的
+redundant raw environment，成功後才移除 request。`saveenv` 失敗時會
+保留 request。
 
 ### Device trees
 
@@ -254,7 +267,8 @@ v1.18。更新 rkbin 後必須重新進行冷開機測試。
 ```text
 0-8 MiB       idbloader/SPL 保留區，idbloader 位於 LBA 0x40
 8-12 MiB      u-boot.itb，位於 LBA 0x4000
-12-16 MiB     logo.bmp 與 logo_kernel.bmp raw 區域
+12-15.5 MiB   logo raw 區域
+15.5-16 MiB   redundant U-Boot environment 保留區
 ```
 
 32 MiB：
@@ -262,8 +276,15 @@ v1.18。更新 rkbin 後必須重新進行冷開機測試。
 ```text
 0-8 MiB       idbloader/SPL 保留區
 8-12 MiB      u-boot.itb 保留區
-12-32 MiB     logo raw 區域
+12-15.5 MiB   logo raw 區域
+15.5-16 MiB   redundant U-Boot environment 保留區
+16-32 MiB     未來 firmware 保留區
 ```
+
+primary 與 redundant environment 各為 64 KiB，位置分別是 `0xf80000`
+與 `0xf90000`。`firmware-update.bin` 結束於 `0xf80000`，更新 firmware
+時不會覆蓋任一份環境；完整 board firmware image 只供建立全新 image
+或外部完整燒錄使用。
 
 目前 R81 包含 raw logo、HDMI/vidconsole、FreeBSD EFI 啟動，以及
 3 秒內建 U-Boot menu：

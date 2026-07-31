@@ -216,6 +216,7 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 |-- logo.img
 |-- bootmenu.env
 |-- nanopc-t6-lts-uboot-16m.bin
+|-- firmware-update.bin
 |-- FIRMWARE-LAYOUT.txt
 |-- BUILD-INFO.txt
 `-- SHA256SUMS
@@ -224,9 +225,21 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 `work/uboot-latest` points to the most recently completed bundle.
 
 The image installs `bootmenu.env` as `/bootmenu.env`. U-Boot imports only
-`bootmenu_title`, `bootmenu_delay`, and `bootmenu_0` through `bootmenu_9`,
-trying `mmc1:1` before `mmc0:1`. If the file is absent or invalid, U-Boot uses
-its built-in FreeBSD/CLI menu.
+`bootmenu_title` and `bootmenu_delay`. It discovers
+`/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and SATA/SCSI, in that
+order, and builds the menu dynamically. `freebsd_default_boot` selects the
+preferred target; an absent target falls back to the first discovered loader.
+
+FreeBSD can request a new default by writing one strict line to the mounted
+ESP as `/uboot-env.request`, for example:
+
+```text
+freebsd_default_boot=mmc1:1
+```
+
+The next U-Boot startup saves the value to the redundant raw environment on
+the same storage that supplied U-Boot, then removes the request. A failed
+`saveenv` leaves the request in place.
 
 ### Device Trees
 
@@ -262,7 +275,8 @@ Updating rkbin requires another complete cold-boot test.
 ```text
 0-8 MiB       Reserved for idbloader/SPL; idbloader starts at LBA 0x40
 8-12 MiB      u-boot.itb at LBA 0x4000
-12-16 MiB     Raw logo.bmp and logo_kernel.bmp area
+12-15.5 MiB   Raw logo area
+15.5-16 MiB   Redundant U-Boot environment reserve
 ```
 
 32 MiB:
@@ -270,8 +284,15 @@ Updating rkbin requires another complete cold-boot test.
 ```text
 0-8 MiB       Reserved for idbloader/SPL
 8-12 MiB      Reserved for u-boot.itb
-12-32 MiB     Raw logo area
+12-15.5 MiB   Raw logo area
+15.5-16 MiB   Redundant U-Boot environment reserve
+16-32 MiB     Future firmware reserve
 ```
+
+The primary and redundant environments are 64 KiB at `0xf80000` and
+`0xf90000`. `firmware-update.bin` ends at `0xf80000`, so firmware updates do
+not overwrite either copy. The full board firmware image is for newly
+created disk images or complete external flashing.
 
 The current R81 bundle includes the raw logo, HDMI/vidconsole, FreeBSD EFI
 boot, and a built-in three-second U-Boot menu:
