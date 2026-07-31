@@ -109,7 +109,7 @@ scripts stop immediately when `BOARD` is not set. The board build examples
 below assume that the preceding `export` command has been run.
 
 Set `SWAP_SIZE_MIB=0` to omit the swap partition, making the root filesystem
-`p2`. A value greater than zero keeps swap on `p2` and root on `p3`.
+`p3`. A value greater than zero keeps swap on `p3` and root on `p4`.
 
 The root filesystem defaults to UFS. Allocate at least 2 GiB when building a
 ZFS root image:
@@ -235,7 +235,7 @@ FreeBSD can request a new default by writing one strict line to the mounted
 ESP as `/uboot-env.request`, for example:
 
 ```text
-freebsd_default_boot=mmc1:1
+freebsd_default_boot=mmc1:2
 ```
 
 The next U-Boot startup saves the value to the redundant raw environment on
@@ -385,10 +385,10 @@ GPT labels remain descriptive only, so duplicate labels cannot redirect boot.
 Default image layout:
 
 ```text
-0-16 MiB       Raw U-Boot firmware and GPT metadata
-16-272 MiB     p1 EFI System Partition
-272-784 MiB    p2 FreeBSD swap
-784-1808 MiB   p3 FreeBSD UFS root
+0-16 MiB       GPT metadata and p1 rk3588_firmware
+16-272 MiB     p2 EFI System Partition
+272-784 MiB    p3 FreeBSD swap
+784-1808 MiB   p4 FreeBSD UFS root
 1808-1904 MiB  Unallocated space for growfs
 ```
 
@@ -404,9 +404,9 @@ prevent first-boot `growfs` from automatically creating a swap partition.
 Corresponding layout:
 
 ```text
-0-16 MiB       Raw U-Boot firmware and GPT metadata
-16-272 MiB     p1 EFI System Partition
-272-1296 MiB   p2 FreeBSD UFS root
+0-16 MiB       GPT metadata and p1 rk3588_firmware
+16-272 MiB     p2 EFI System Partition
+272-1296 MiB   p3 FreeBSD UFS root
 1296-1392 MiB  Unallocated space for growfs
 ```
 

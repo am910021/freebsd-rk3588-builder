@@ -129,9 +129,10 @@ SWAP_SECTORS=$((SWAP_SIZE_MIB * SECTORS_PER_MIB))
 ROOT_START=$((SWAP_END_MIB * SECTORS_PER_MIB))
 ROOT_SECTORS=$((ROOT_SIZE_MIB * SECTORS_PER_MIB))
 TOTAL_SECTORS=$((IMAGE_SIZE_MIB * SECTORS_PER_MIB))
-ROOT_PARTITION=2
+ESP_PARTITION=2
+ROOT_PARTITION=3
 if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
-	ROOT_PARTITION=3
+	ROOT_PARTITION=4
 fi
 
 md=
@@ -226,6 +227,16 @@ echo "== Installing complete ${FIRMWARE_MIB} MiB U-Boot ${UBOOT_VERSION} firmwar
 dd if="${UBOOT_BIN}" of="${OUT}" bs=1m conv=notrunc,sync status=none
 md=$(mdconfig -a -t vnode -f "${OUT}")
 gpart create -s gpt "${md}"
+FIRMWARE_START=$(gpart show -p "${md}" |
+	awk '$3 == "-" && $4 == "free" { print $1; exit }')
+case "${FIRMWARE_START}" in
+	''|*[!0-9]*) die "cannot determine first usable GPT sector" ;;
+esac
+[ "${FIRMWARE_START}" -le 64 ] ||
+    die "GPT metadata overlaps idbloader at LBA 64"
+FIRMWARE_SECTORS=$((ESP_START - FIRMWARE_START))
+gpart add -b "${FIRMWARE_START}" -s "${FIRMWARE_SECTORS}" \
+    -t freebsd-boot -l rk3588_firmware "${md}"
 gpart add -b "${ESP_START}" -s "${ESP_SECTORS}" -t efi -l EFI "${md}"
 if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
 	gpart add -b "${SWAP_START}" -s "${SWAP_SECTORS}" -t freebsd-swap \
@@ -234,13 +245,13 @@ fi
 gpart add -b "${ROOT_START}" -s "${ROOT_SECTORS}" -t "freebsd-${ROOTFS_TYPE}" \
     -l freebsd_root "${md}"
 
-esp_uuid=$(partition_uuid "${md}" 1)
+esp_uuid=$(partition_uuid "${md}" "${ESP_PARTITION}")
 root_uuid=$(partition_uuid "${md}" "${ROOT_PARTITION}")
 [ -n "${esp_uuid}" ] || die "cannot determine ESP partition GUID"
 [ -n "${root_uuid}" ] || die "cannot determine root partition GUID"
 swap_uuid=
 if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
-	swap_uuid=$(partition_uuid "${md}" 2)
+	swap_uuid=$(partition_uuid "${md}" 3)
 	[ -n "${swap_uuid}" ] || die "cannot determine swap partition GUID"
 fi
 
@@ -418,8 +429,8 @@ else
 fi
 
 echo "== Installing ESP =="
-newfs_msdos -L EFI -F 16 "/dev/${md}p1" >/dev/null
-mount -t msdosfs "/dev/${md}p1" "${esp_mnt}"
+newfs_msdos -L EFI -F 16 "/dev/${md}p${ESP_PARTITION}" >/dev/null
+mount -t msdosfs "/dev/${md}p${ESP_PARTITION}" "${esp_mnt}"
 mkdir -p "${esp_mnt}/EFI/BOOT" "${esp_mnt}/EFI/FreeBSD" \
     "${esp_mnt}/EFI/overlays" \
     "$(dirname "${esp_mnt}${FREEBSD_DTB_ESP_PATH}")"
@@ -464,7 +475,7 @@ esp_mnt=
 
 echo "== Verifying image =="
 gpart show -p "${md}"
-fsck_msdosfs -n "/dev/${md}p1"
+fsck_msdosfs -n "/dev/${md}p${ESP_PARTITION}"
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 	fsck_ufs -n "/dev/${md}p${ROOT_PARTITION}"
 else
@@ -507,17 +518,17 @@ U-Boot FDT overlays: ${UBOOT_FDT_OVERLAYS}
 if_rge.pkg: ${rge_pkg}
 if_rge.pkg SHA256: ${rge_sha}
 Layout:
-  raw firmware:  0-${FIRMWARE_MIB} MiB
-  p1 ESP:        ${FIRMWARE_MIB}-${ESP_END_MIB} MiB
+  p1 firmware:   0-${FIRMWARE_MIB} MiB
+  p2 ESP:        ${FIRMWARE_MIB}-${ESP_END_MIB} MiB
 EOF
 if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
 	cat >> "${OUT}.build-info.txt" <<EOF
-  p2 swap:       ${ESP_END_MIB}-${SWAP_END_MIB} MiB
-  p3 ${ROOTFS_TYPE} root:   ${SWAP_END_MIB}-${ROOT_END_MIB} MiB
+  p3 swap:       ${ESP_END_MIB}-${SWAP_END_MIB} MiB
+  p4 ${ROOTFS_TYPE} root:   ${SWAP_END_MIB}-${ROOT_END_MIB} MiB
 EOF
 else
 	cat >> "${OUT}.build-info.txt" <<EOF
-  p2 ${ROOTFS_TYPE} root:   ${ESP_END_MIB}-${ROOT_END_MIB} MiB
+  p3 ${ROOTFS_TYPE} root:   ${ESP_END_MIB}-${ROOT_END_MIB} MiB
 EOF
 fi
 cat >> "${OUT}.build-info.txt" <<EOF

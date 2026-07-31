@@ -104,7 +104,7 @@ JOBS=16
 建置腳本會直接終止。以下 board 建置範例均假設已執行上述 `export`。
 
 設定 `SWAP_SIZE_MIB=0` 時不建立 swap partition，root filesystem 會成為
-`p2`；大於零時維持 `p2` swap、`p3` root。
+`p3`；大於零時維持 `p3` swap、`p4` root。
 
 Root filesystem 預設為 UFS。建立 ZFS root image 時建議至少配置 2 GiB：
 
@@ -228,7 +228,7 @@ FreeBSD 可在已掛載的 ESP 寫入單一嚴格格式的 `/uboot-env.request`�
 要求變更預設目標，例如：
 
 ```text
-freebsd_default_boot=mmc1:1
+freebsd_default_boot=mmc1:2
 ```
 
 下次啟動時，U-Boot 會把設定寫入與自身開機來源相同儲存裝置上的
@@ -375,10 +375,10 @@ image builder 與 `rk3588-install` 會產生新的 GPT partition GUID，並以
 預設 image layout：
 
 ```text
-0-16 MiB       raw U-Boot firmware 與 GPT metadata
-16-272 MiB     p1 EFI System Partition
-272-784 MiB    p2 FreeBSD swap
-784-1808 MiB   p3 FreeBSD UFS root
+0-16 MiB       GPT metadata 與 p1 rk3588_firmware
+16-272 MiB     p2 EFI System Partition
+272-784 MiB    p3 FreeBSD swap
+784-1808 MiB   p4 FreeBSD UFS root
 1808-1904 MiB  未分配空間，供 growfs 使用
 ```
 
@@ -394,9 +394,9 @@ first boot 的 `growfs` 自動補建 swap。
 對應 layout：
 
 ```text
-0-16 MiB       raw U-Boot firmware 與 GPT metadata
-16-272 MiB     p1 EFI System Partition
-272-1296 MiB   p2 FreeBSD UFS root
+0-16 MiB       GPT metadata 與 p1 rk3588_firmware
+16-272 MiB     p2 EFI System Partition
+272-1296 MiB   p3 FreeBSD UFS root
 1296-1392 MiB  未分配空間，供 growfs 使用
 ```
 
