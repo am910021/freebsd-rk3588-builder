@@ -180,8 +180,8 @@ KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 ```
 
 `build-ports.sh` 會用同一套 FreeBSD object tree 與 arm64 toolchain
-建置 `PORT_ORIGINS` 內的所有 origin。image 組裝只使用建好的 package，
-不會在組裝期間編譯 port。
+建置 `PORT_ORIGINS` 內的所有 origin。image 組裝會安裝清單內建好的
+package，不會在組裝期間編譯 port。
 
 ## 建立 U-Boot
 
@@ -354,6 +354,19 @@ output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg.sha256
 
 `build-u-boot-2026.07-complete.sh` 與 image builder 都使用
 `builder.conf` 的 `FIRMWARE_MIB`，不需分別傳入。
+
+### Installer package 與 payload
+
+`PORT_ORIGINS` 與 `INSTALLER=YES` 彼此獨立：
+
+- `PORT_ORIGINS` 包含 `sysutils/rk3588-installer` 時，image 會安裝
+  `rk3588-installer` package。
+- `INSTALLER=YES` 只負責放入 `base.txz`、`kernel.txz`、firmware、DTB
+  與 U-Boot menu payload，不會自行安裝 package。
+
+只有 `INSTALLER=YES` 的 image，可以日後再安裝 `rk3588-installer`
+package 後使用。只有 package 而沒有 payload 時，`rk3588-install`
+會回報缺少 payload 並拒絕執行安裝。
 
 image builder 與 `rk3588-install` 會產生新的 GPT partition GUID，並以
 `/dev/gptid/<GUID>` 指定 UFS root、ESP 與 swap。filesystem 與 GPT label

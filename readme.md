@@ -187,7 +187,8 @@ KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 
 `build-ports.sh` builds every origin in `PORT_ORIGINS` with the same FreeBSD
 object tree and arm64 toolchain. Image assembly consumes only the resulting
-packages and never builds ports itself.
+packages, installs those packages into the image, and never builds ports
+itself.
 
 ## Building U-Boot
 
@@ -362,6 +363,20 @@ Or explicitly specify the txz archives and output image:
 
 Both `build-u-boot-2026.07-complete.sh` and the image builder use
 `FIRMWARE_MIB` from `builder.conf`; it does not need to be passed separately.
+
+### Installer package and payload
+
+`PORT_ORIGINS` and `INSTALLER=YES` are independent:
+
+- Including `sysutils/rk3588-installer` in `PORT_ORIGINS` installs the
+  `rk3588-installer` package into the image.
+- `INSTALLER=YES` embeds `base.txz`, `kernel.txz`, firmware, DTB, and U-Boot
+  menu payloads. It does not install the package by itself.
+
+An image with only `INSTALLER=YES` becomes usable after installing the
+`rk3588-installer` package later. An image containing only the package has no
+payload, so `rk3588-install` reports the missing payload and refuses to
+install.
 
 The image builder and `rk3588-install` generate new GPT partition GUIDs and
 use `/dev/gptid/<GUID>` for UFS root, ESP, and swap references. Filesystem and

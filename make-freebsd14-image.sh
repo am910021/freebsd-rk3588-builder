@@ -151,7 +151,8 @@ if [ -z "${rge_pkg}" ]; then
 fi
 
 installer_pkg=
-if [ "${INSTALLER}" = "YES" ]; then
+case " ${PORT_ORIGINS} " in
+*" sysutils/rk3588-installer "*)
 	for candidate in "${TXZ_ROOT}"/rk3588-installer-*.pkg; do
 		[ -f "${candidate}" ] || continue
 		[ -z "${installer_pkg}" ] ||
@@ -160,7 +161,8 @@ if [ "${INSTALLER}" = "YES" ]; then
 	done
 	[ -n "${installer_pkg}" ] ||
 	    die "no rk3588-installer package found in ${TXZ_ROOT}"
-fi
+	;;
+esac
 
 cleanup()
 {
@@ -187,9 +189,8 @@ for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${rge_pkg}" "${UBOOT_BIN}" \
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
 if [ "${INSTALLER}" = "YES" ]; then
-	for file in "${MANIFEST_SCRIPT}" "${installer_pkg}"; do
-		[ -f "${file}" ] || die "missing installer input: ${file}"
-	done
+	[ -f "${MANIFEST_SCRIPT}" ] ||
+	    die "missing installer input: ${MANIFEST_SCRIPT}"
 fi
 [ ! -e "${OUT}" ] || die "output already exists: ${OUT}"
 
@@ -251,6 +252,9 @@ fi
 tar -xpf "${BASE_TXZ}" -C "${root_mnt}"
 tar -xpf "${KERNEL_TXZ}" -C "${root_mnt}"
 ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${rge_pkg}"
+if [ -n "${installer_pkg}" ]; then
+	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${installer_pkg}"
+fi
 if [ -d "${BOARD_FILES_DIR}" ]; then
 	(cd "${BOARD_FILES_DIR}" && tar -cpf - .) |
 	    (cd "${root_mnt}" && tar -xpf -)
@@ -265,7 +269,6 @@ touch "${root_mnt}/firstboot"
 if [ "${INSTALLER}" = "YES" ]; then
 	distdir="${root_mnt}/usr/freebsd-dist"
 	payload="${root_mnt}/usr/local/share/rk3588-installer"
-	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${installer_pkg}"
 	mkdir -p "${distdir}" "${payload}" \
 	    "${root_mnt}/usr/local/sbin"
 	cp -p "${BASE_TXZ}" "${distdir}/base.txz"
@@ -387,7 +390,8 @@ logo.bmp: ${logo_sha}
 ESP partition GUID: ${esp_uuid}
 Root partition GUID: ${root_uuid}
 Root filesystem: ${ROOTFS_TYPE}
-Installer image: ${INSTALLER}
+Installed ports: ${PORT_ORIGINS}
+Installer payload: ${INSTALLER}
 EOF
 if [ -n "${swap_uuid}" ]; then
 	echo "Swap partition GUID: ${swap_uuid}" \
@@ -491,7 +495,8 @@ SHA256: ${image_sha}
 Board: ${BOARD}
 FreeBSD source commit: ${src_commit}
 Root filesystem: ${ROOTFS_TYPE}
-Installer image: ${INSTALLER}
+Installed ports: ${PORT_ORIGINS}
+Installer payload: ${INSTALLER}
 U-Boot: ${UBOOT_DIR}
 U-Boot firmware: ${UBOOT_BIN}
 U-Boot firmware SHA256: ${firmware_sha}
