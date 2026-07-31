@@ -90,8 +90,15 @@ else
 fi
 cleanup()
 {
-	[ -z "${STAGING_OUT}" ] || rm -rf "${STAGING_OUT}"
-	[ "${AUTO_WORK}" = "0" ] || rm -rf "${WORK}"
+	mkdir -p "${HOME}/ready-to-delete"
+	if [ -n "${STAGING_OUT}" ] && [ -e "${STAGING_OUT}" ]; then
+		mv "${STAGING_OUT}" \
+		    "${HOME}/ready-to-delete/${STAGING_OUT##*/}-$(date +%Y%m%d-%H%M%S)-$$"
+	fi
+	if [ "${AUTO_WORK}" = "1" ] && [ -e "${WORK}" ]; then
+		mv "${WORK}" \
+		    "${HOME}/ready-to-delete/${WORK##*/}-$(date +%Y%m%d-%H%M%S)-$$"
+	fi
 }
 trap cleanup EXIT INT TERM
 
@@ -153,10 +160,13 @@ idb_offset = 0x40 * sector
 uboot_offset = 0x4000 * sector
 logo_offset = 0x6000 * sector
 logo_read_size = 0x961 * sector
+env_offset = 0xf80000
+env_offset_redund = 0xf90000
+env_size = 0x10000
+env_reserve_end = 16 * mib
 
 menu = (out / "bootmenu.env").read_text(encoding="utf-8").splitlines()
 allowed = {"bootmenu_title", "bootmenu_delay"}
-allowed.update(f"bootmenu_{index}" for index in range(10))
 entries = set()
 for line in menu:
     line = line.strip()
@@ -166,8 +176,8 @@ for line in menu:
     if not separator or name not in allowed:
         raise SystemExit(f"invalid bootmenu.env line: {line!r}")
     entries.add(name)
-if "bootmenu_0" not in entries:
-    raise SystemExit("bootmenu.env lacks bootmenu_0")
+if entries != allowed:
+    raise SystemExit("bootmenu.env must set bootmenu_title and bootmenu_delay")
 
 binary = (out / "u-boot.bin").read_bytes()
 for marker in (
@@ -177,7 +187,9 @@ for marker in (
     b"logo_enable=" + logo_enable,
     b"load_bootmenu=",
     b"show_logo=",
-    b"boot_freebsd=",
+    b"freebsdboot",
+    b"boot_freebsd_target=",
+    b"freebsd_default_boot=auto",
     b"rk_boot_storage",
     b"rockchip,boot-storage",
 ):
@@ -194,12 +206,24 @@ if len(logo_raw) > logo_read_size:
         f"but U-Boot reads only {logo_read_size}"
     )
 
+config = (out / "u-boot.config").read_text(encoding="utf-8")
+for setting in (
+    f"CONFIG_ENV_OFFSET=0x{env_offset:x}",
+    f"CONFIG_ENV_OFFSET_REDUND=0x{env_offset_redund:x}",
+    f"CONFIG_ENV_SIZE=0x{env_size:x}",
+    "CONFIG_ENV_REDUNDANT=y",
+    "CONFIG_ENV_IS_IN_MMC=y",
+    "CONFIG_ENV_IS_IN_SPI_FLASH=y",
+):
+    if setting not in config.splitlines():
+        raise SystemExit(f"u-boot.config lacks setting: {setting}")
+
 idb = (out / "idbloader.img").read_bytes()
 uboot = (out / "u-boot.itb").read_bytes()
 limits = (
     ("idbloader.img", idb_offset, idb, 8 * mib),
     ("u-boot.itb", uboot_offset, uboot, logo_offset),
-    ("logo.img", logo_offset, logo_raw, size_mib * mib),
+    ("logo.img", logo_offset, logo_raw, env_offset),
 )
 for name, offset, data, limit in limits:
     if offset + len(data) > limit:
@@ -214,6 +238,7 @@ for _, offset, data, _ in limits:
 
 firmware_name = f"{board}-uboot-{size_mib}m.bin"
 (out / firmware_name).write_bytes(firmware)
+(out / "firmware-update.bin").write_bytes(firmware[:env_offset])
 (out / "logo.img").write_bytes(logo_raw)
 (out / "FIRMWARE-LAYOUT.txt").write_text(
     f"Firmware size: {size_mib} MiB\n"
@@ -221,7 +246,11 @@ firmware_name = f"{board}-uboot-{size_mib}m.bin"
     f"idbloader.img: LBA 0x40, {len(idb)} bytes, limit 8 MiB\n"
     f"u-boot.itb: LBA 0x4000, {len(uboot)} bytes, limit 12 MiB\n"
     f"logo.img: LBA 0x6000, {len(logo_raw)} bytes, "
-    f"region {size_mib - 12} MiB\n"
+    f"limit {env_offset} bytes\n"
+    f"environment primary: 0x{env_offset:x}, {env_size} bytes\n"
+    f"environment redundant: 0x{env_offset_redund:x}, {env_size} bytes\n"
+    f"environment reserved area: 0x{env_offset:x}-0x{env_reserve_end:x}\n"
+    f"firmware-update.bin: 0x0-0x{env_offset:x}; preserves environment\n"
 )
 PY
 
@@ -241,6 +270,7 @@ Logo enabled: ${UBOOT_LOGO_ENABLE}
 ESP menu: ${BOOTMENU_ENV}
 FreeBSD DTS: ${FREEBSD_DTS}
 Firmware image: ${BOARD}-uboot-${FIRMWARE_MIB}m.bin
+Firmware update image: firmware-update.bin
 Firmware size: ${FIRMWARE_MIB} MiB
 EOF
 
@@ -250,6 +280,7 @@ EOF
 	    uboot-control.dtb freebsd-runtime.dtb \
 	    logo.bmp logo.img bootmenu.env \
 	    "${BOARD}-uboot-${FIRMWARE_MIB}m.bin" \
+	    firmware-update.bin \
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt > SHA256SUMS
 )
 
@@ -266,5 +297,6 @@ ln -sfn "${OUT}" "${WORK_ROOT}/uboot-latest"
 echo "== ${BOARD} U-Boot ${UBOOT_VERSION} complete bundle =="
 ls -lh "${OUT}/idbloader.img" "${OUT}/u-boot.itb" \
     "${OUT}/logo.img" \
+    "${OUT}/firmware-update.bin" \
     "${OUT}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin"
 echo "${OUT}"
