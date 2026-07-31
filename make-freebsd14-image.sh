@@ -70,6 +70,7 @@ case $# in
 esac
 
 UBOOT_BIN=${UBOOT_DIR}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin
+UBOOT_UPDATE_BIN=${UBOOT_DIR}/firmware-update.bin
 IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb
 BOOTMENU_FILE=${UBOOT_DIR}/bootmenu.env
@@ -174,12 +175,14 @@ cleanup()
 	fi
 	if [ "${AUTO_WORK}" = "1" ]; then
 		chflags -R noschg,nouchg "${WORK}" >/dev/null 2>&1 || true
-		rm -rf "${WORK}"
+		mkdir -p "${HOME}/ready-to-delete"
+		mv "${WORK}" \
+		    "${HOME}/ready-to-delete/${WORK##*/}-$(date +%Y%m%d-%H%M%S)-$$"
 	fi
 }
 
 for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${rge_pkg}" "${UBOOT_BIN}" \
-    "${IDBLOADER}" "${UBOOT_ITB}" "${BOOTMENU_FILE}" \
+    "${UBOOT_UPDATE_BIN}" "${IDBLOADER}" "${UBOOT_ITB}" "${BOOTMENU_FILE}" \
     "${FREEBSD_DTB}" "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
@@ -271,12 +274,14 @@ if [ "${INSTALLER}" = "YES" ]; then
 		cd "${distdir}"
 		sh "${MANIFEST_SCRIPT}" base.txz kernel.txz > MANIFEST
 	)
-	cp -p "${UBOOT_BIN}" "${payload}/firmware.bin"
+	cp -p "${UBOOT_UPDATE_BIN}" "${payload}/firmware-update.bin"
 	cp -p "${rge_pkg}" "${payload}/if_rge.pkg"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
 	cp -p "${BOOTMENU_FILE}" "${payload}/bootmenu.env"
+	firmware_update_bytes=$(stat -f %z "${UBOOT_UPDATE_BIN}")
 	cat > "${payload}/config" <<EOF
 FIRMWARE_MIB=${FIRMWARE_MIB}
+FIRMWARE_UPDATE_BYTES=${firmware_update_bytes}
 ESP_MIB=${ESP_SIZE_MIB}
 ROOT_LABEL=${INSTALL_TARGET_ROOT_LABEL}
 ZFS_POOL_NAME=${ZFS_POOL_NAME}
@@ -351,6 +356,7 @@ base_sha=$(sha256 -q "${BASE_TXZ}")
 kernel_sha=$(sha256 -q "${KERNEL_TXZ}")
 rge_sha=$(sha256 -q "${rge_pkg}")
 firmware_sha=$(sha256 -q "${UBOOT_BIN}")
+firmware_update_sha=$(sha256 -q "${UBOOT_UPDATE_BIN}")
 idb_sha=$(sha256 -q "${IDBLOADER}")
 uboot_sha=$(sha256 -q "${UBOOT_ITB}")
 dtb_sha=$(sha256 -q "${FREEBSD_DTB}")
@@ -365,6 +371,7 @@ base.txz: ${base_sha}
 kernel.txz: ${kernel_sha}
 if_rge.pkg: ${rge_sha}
 firmware.bin: ${firmware_sha}
+firmware-update.bin: ${firmware_update_sha}
 idbloader.img: ${idb_sha}
 u-boot.itb: ${uboot_sha}
 FreeBSD DTB: ${dtb_sha}
@@ -480,6 +487,8 @@ Installer image: ${INSTALLER}
 U-Boot: ${UBOOT_DIR}
 U-Boot firmware: ${UBOOT_BIN}
 U-Boot firmware SHA256: ${firmware_sha}
+U-Boot update payload: ${UBOOT_UPDATE_BIN}
+U-Boot update payload SHA256: ${firmware_update_sha}
 FreeBSD DTB: ${FREEBSD_DTB}
 U-Boot FDT overlays: ${UBOOT_FDT_OVERLAYS}
 if_rge.pkg: ${rge_pkg}
