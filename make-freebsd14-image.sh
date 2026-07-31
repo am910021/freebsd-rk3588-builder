@@ -372,6 +372,11 @@ fi
 if [ -f "${BOARD_DIR}/loader.conf" ]; then
 	cat "${BOARD_DIR}/loader.conf" >> "${root_mnt}/boot/loader.conf"
 fi
+if [ "${INSTALLER}" = "YES" ]; then
+	cp -p "${root_mnt}/etc/rc.conf" "${payload}/rc.conf.base"
+	sed '/^[[:space:]]*vfs\.root\.mountfrom[[:space:]]*=/d' \
+	    "${root_mnt}/boot/loader.conf" > "${payload}/loader.conf.base"
+fi
 
 base_sha=$(sha256 -q "${BASE_TXZ}")
 kernel_sha=$(sha256 -q "${KERNEL_TXZ}")
