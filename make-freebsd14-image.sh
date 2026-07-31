@@ -278,6 +278,9 @@ if [ "${INSTALLER}" = "YES" ]; then
 	cp -p "${rge_pkg}" "${payload}/if_rge.pkg"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
 	cp -p "${BOOTMENU_FILE}" "${payload}/bootmenu.env"
+	if [ -f "${BOARD_DIR}/loader.conf" ]; then
+		cp -p "${BOARD_DIR}/loader.conf" "${payload}/loader.conf.board"
+	fi
 	firmware_update_bytes=$(stat -f %z "${UBOOT_UPDATE_BIN}")
 	cat > "${payload}/config" <<EOF
 FIRMWARE_MIB=${FIRMWARE_MIB}
@@ -314,6 +317,8 @@ ifconfig_DEFAULT="DHCP"
 sshd_enable="YES"
 growfs_enable="YES"
 powerd_enable="YES"
+ntpd_enable="YES"
+ntpd_sync_on_start="YES"
 sendmail_enable="NONE"
 sendmail_submit_enable="NO"
 sendmail_outbound_enable="NO"
@@ -350,6 +355,9 @@ kern.geom.label.disk_ident.enable="0"
 zfs_load="YES"
 vfs.root.mountfrom="zfs:${ZFS_POOL_NAME}/ROOT/default"
 EOF
+fi
+if [ -f "${BOARD_DIR}/loader.conf" ]; then
+	cat "${BOARD_DIR}/loader.conf" >> "${root_mnt}/boot/loader.conf"
 fi
 
 base_sha=$(sha256 -q "${BASE_TXZ}")
