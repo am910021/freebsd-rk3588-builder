@@ -219,7 +219,7 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 `work/uboot-latest` 會指向最新完成的 bundle。
 
 映像檔會將 `bootmenu.env` 安裝為 `/bootmenu.env`。U-Boot 只會匯入
-`bootmenu_title` 與 `bootmenu_delay`，再依 eMMC、SD、USB、NVMe、
+`bootmenu_title`、`bootmenu_delay` 與 `logo_delay`，再依 eMMC、SD、USB、NVMe、
 SATA/SCSI 順序尋找 `/EFI/FreeBSD/loader.efi` 並動態產生選單。
 `freebsd_default_boot` 指定優先目標；目標不存在時會退回第一個找到的
 loader。

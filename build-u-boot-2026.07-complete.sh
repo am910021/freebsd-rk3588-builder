@@ -166,7 +166,7 @@ env_size = 0x10000
 env_reserve_end = 16 * mib
 
 menu = (out / "bootmenu.env").read_text(encoding="utf-8").splitlines()
-allowed = {"bootmenu_title", "bootmenu_delay"}
+allowed = {"bootmenu_title", "bootmenu_delay", "logo_delay"}
 entries = set()
 for line in menu:
     line = line.strip()
@@ -177,12 +177,15 @@ for line in menu:
         raise SystemExit(f"invalid bootmenu.env line: {line!r}")
     entries.add(name)
 if entries != allowed:
-    raise SystemExit("bootmenu.env must set bootmenu_title and bootmenu_delay")
+    raise SystemExit(
+        "bootmenu.env must set bootmenu_title, bootmenu_delay, and logo_delay"
+    )
 
 binary = (out / "u-boot.bin").read_bytes()
 for marker in (
     binary_marker,
     b"bootmenu_delay=3",
+    b"logo_delay=0",
     b"bootmenu_config=/bootmenu.env",
     b"logo_enable=" + logo_enable,
     b"load_bootmenu=",

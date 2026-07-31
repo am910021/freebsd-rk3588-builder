@@ -226,7 +226,7 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 `work/uboot-latest` points to the most recently completed bundle.
 
 The image installs `bootmenu.env` as `/bootmenu.env`. U-Boot imports only
-`bootmenu_title` and `bootmenu_delay`. It discovers
+`bootmenu_title`, `bootmenu_delay`, and `logo_delay`. It discovers
 `/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and SATA/SCSI, in that
 order, and builds the menu dynamically. `freebsd_default_boot` selects the
 preferred target; an absent target falls back to the first discovered loader.
