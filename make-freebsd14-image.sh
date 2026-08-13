@@ -43,6 +43,9 @@ NO) ;;
 	exit 1
 	;;
 esac
+if [ "${INSTALLER}" = "YES" ]; then
+	echo "== INSTALLER=YES: installer payload enabled =="
+fi
 OUT=${OUT:-${IMAGE_OUTPUT_DIR}/${BOARD}-freebsd${FREEBSD_OBJ_VERSION}${ROOTFS_SUFFIX}-uboot${UBOOT_VERSION}-${FIRMWARE_MIB}m-${STAMP}.img}
 WORK=${WORK:-}
 rge_pkg=
@@ -81,6 +84,10 @@ die()
 	echo "${0##*/}: $*" >&2
 	exit 1
 }
+
+for file in "${BASE_TXZ}" "${KERNEL_TXZ}"; do
+	[ -f "${file}" ] || die "missing input: ${file}"
+done
 
 partition_uuid()
 {
@@ -184,9 +191,9 @@ cleanup()
 	fi
 }
 
-for file in "${BASE_TXZ}" "${KERNEL_TXZ}" "${rge_pkg}" "${UBOOT_BIN}" \
-    "${UBOOT_UPDATE_BIN}" "${IDBLOADER}" "${UBOOT_ITB}" "${BOOTMENU_FILE}" \
-    "${FREEBSD_DTB}" "${LOGO_BMP}"; do
+for file in "${rge_pkg}" "${UBOOT_BIN}" "${UBOOT_UPDATE_BIN}" \
+    "${IDBLOADER}" "${UBOOT_ITB}" "${BOOTMENU_FILE}" "${FREEBSD_DTB}" \
+    "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
 if [ "${INSTALLER}" = "YES" ]; then

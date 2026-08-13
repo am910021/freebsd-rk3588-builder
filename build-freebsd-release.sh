@@ -28,6 +28,8 @@ esac
 	die "missing kernel configuration: ${FREEBSD_KERNCONF}"
 [ -z "$(git -C "${FREEBSD_SRC_DIR}" status --porcelain)" ] ||
 	die "FreeBSD source has uncommitted changes"
+[ "${FREEBSD_SRC_COMMIT}" != unknown ] ||
+	die "cannot determine FreeBSD source commit"
 
 for cmd in cp git make sha256; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
@@ -57,22 +59,24 @@ release_make()
 	    NOPORTS=yes NOSRC=yes NOPKG=yes ${no_clean_make_arg} "$@"
 }
 
-commit=$(git -C "${FREEBSD_SRC_DIR}" rev-parse --short HEAD)
+commit=${FREEBSD_SRC_COMMIT}
 echo "== Building FreeBSD ${commit} with ${FREEBSD_KERNCONF} =="
 echo "== NO_CLEAN=${NO_CLEAN} =="
 freebsd_make -j"${JOBS}" buildworld buildkernel
 
-echo "== Packaging base.txz and kernel.txz =="
+echo "== Packaging versioned base and kernel archives =="
+release_make clean
 release_make obj
 release_make -j"${JOBS}" base.txz kernel.txz
 release_obj=$(release_make -V .OBJDIR)
 
-for archive in base.txz kernel.txz; do
-	[ -f "${release_obj}/${archive}" ] ||
-	    die "release did not produce ${release_obj}/${archive}"
-	cp -p "${release_obj}/${archive}" "${TXZ_ROOT}/${archive}"
-done
+[ -f "${release_obj}/base.txz" ] ||
+	die "release did not produce ${release_obj}/base.txz"
+[ -f "${release_obj}/kernel.txz" ] ||
+	die "release did not produce ${release_obj}/kernel.txz"
+cp -p "${release_obj}/base.txz" "${BASE_TXZ}"
+cp -p "${release_obj}/kernel.txz" "${KERNEL_TXZ}"
 
-sha256 "${TXZ_ROOT}/base.txz" "${TXZ_ROOT}/kernel.txz"
+sha256 "${BASE_TXZ}" "${KERNEL_TXZ}"
 echo "FreeBSD objects: ${FREEBSD_OBJ}"
 echo "Release packages: ${TXZ_ROOT}"
