@@ -23,16 +23,11 @@
 	phy-supply = <&vbus5v0_usb>;
 };
 
-&usb_host1_xhci {
-	extcon = <&u2phy0>;
-};
-
-&usb_host0_xhci {
-	dr_mode = "host";
-};
-
-&vbus5v0_typec {
-	regulator-always-on;
+&usbc0 {
+	connector {
+		data-role = "host";
+		power-role = "source";
+	};
 };
 
 &cluster0_opp_table {
