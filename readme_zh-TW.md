@@ -8,6 +8,31 @@
 
 目前支援的 board 是 `nanopc-t6-lts`。
 
+## 建置主機需求
+
+Builder 已在 FreeBSD 14.3 amd64 主機驗證。所需套件全部使用 `pkg`
+安裝：
+
+```sh
+pkg install -y git aarch64-none-elf-gcc gmake bison swig \
+    python3 py312-setuptools py312-more-itertools py312-pyelftools
+```
+
+其餘 host 工具由 FreeBSD base 提供，包括 `cc`、`flex`、`openssl`、
+`dtc`、`make`、`makefs`、`mdconfig` 與 `gpart`。
+
+可用以下指令確認兩個較不明顯的 U-Boot 需求：
+
+```sh
+swig -version
+python3 -c 'import elftools, setuptools'
+```
+
+不需要另外安裝 Python 3.8、`ensurepip`、pipenv 或由 pip 管理的建置
+modules。Scripts 直接使用 package 提供的 `/usr/local/bin/python3`；
+U-Boot 以 SWIG 建立 `pylibfdt`，Rockchip FIT image 的 binman 階段則使用
+pyelftools。
+
 ## 必要建置順序
 
 必須依照以下順序執行。更改順序可能產生不完整或內容不一致的 image。

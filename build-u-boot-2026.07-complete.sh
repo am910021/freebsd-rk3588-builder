@@ -58,11 +58,13 @@ done
 [ -n "${UBOOT_BINARY_MARKER}" ] ||
     fail "UBOOT_BINARY_MARKER is not configured"
 [ -d "${UBOOT_SRC_DIR}" ] || fail "missing source: ${UBOOT_SRC_DIR}"
-for cmd in git gmake mktemp python3 sha256; do
+for cmd in git gmake bison mktemp python3 sha256 swig; do
 	command -v "${cmd}" >/dev/null 2>&1 || fail "missing command: ${cmd}"
 done
 command -v "${CROSS_COMPILE}gcc" >/dev/null 2>&1 ||
     fail "missing compiler: ${CROSS_COMPILE}gcc"
+python3 -c 'import elftools, setuptools' >/dev/null 2>&1 ||
+    fail "missing Python modules: install py312-pyelftools, py312-setuptools, and py312-more-itertools"
 
 SOURCE_COMMIT=$(git -C "${UBOOT_SRC_DIR}" rev-parse HEAD)
 SOURCE_BRANCH=$(git -C "${UBOOT_SRC_DIR}" symbolic-ref --short HEAD \

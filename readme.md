@@ -10,6 +10,30 @@ Build the following for RK3588 SBCs on a FreeBSD amd64 host:
 
 The currently supported board is `nanopc-t6-lts`.
 
+## Build Host Requirements
+
+The builder is tested on a FreeBSD 14.3 amd64 host. Install the required
+packages with `pkg` only:
+
+```sh
+pkg install -y git aarch64-none-elf-gcc gmake bison swig \
+    python3 py312-setuptools py312-more-itertools py312-pyelftools
+```
+
+FreeBSD base provides the remaining host tools, including `cc`, `flex`,
+`openssl`, `dtc`, `make`, `makefs`, `mdconfig`, and `gpart`.
+
+Verify the two non-obvious U-Boot requirements with:
+
+```sh
+swig -version
+python3 -c 'import elftools, setuptools'
+```
+
+Do not install Python 3.8, `ensurepip`, pipenv, or pip-managed build modules.
+The scripts use the packaged `/usr/local/bin/python3`; U-Boot uses SWIG for
+`pylibfdt` and pyelftools for the Rockchip FIT image assembled by binman.
+
 ## Required Build Order
 
 Run the following steps in order. Changing the order can produce an incomplete
