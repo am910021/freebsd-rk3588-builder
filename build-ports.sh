@@ -21,13 +21,14 @@ die()
 	die "missing FreeBSD source: ${FREEBSD_SRC_DIR}"
 [ -f "${KERNBUILDDIR}/opt_global.h" ] ||
 	die "missing kernel build directory: ${KERNBUILDDIR}"
-[ -x "${TOOLBIN}/cc" ] || die "missing arm64 toolchain: ${TOOLBIN}"
+[ -f "${FREEBSD_OBJ}/tmp/usr/include/sys/param.h" ] ||
+	die "missing arm64 sysroot: ${FREEBSD_OBJ}/tmp"
 [ -x "${FREEBSD_OBJ}/bin/sh/sh" ] ||
 	die "missing target ABI executable: ${FREEBSD_OBJ}/bin/sh/sh"
 [ -z "$(git -C "${PORTS_SRC_DIR}" status --porcelain)" ] ||
 	die "ports source has uncommitted changes"
 
-for cmd in make git pkg sha256 readelf tr date; do
+for cmd in make git pkg sha256 readelf tr date cc c++ cpp; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
 
@@ -35,6 +36,8 @@ osversion=$(awk '
     $1 == "#define" && $2 == "__FreeBSD_version" { print $3; exit }
 ' "${FREEBSD_SRC_DIR}/sys/sys/param.h")
 [ -n "${osversion}" ] || die "cannot determine target OSVERSION"
+cross_target=aarch64-unknown-freebsd${FREEBSD_OBJ_VERSION%%-*}
+target_sysroot=${FREEBSD_OBJ}/tmp
 
 ports_work=${WORK_ROOT}/ports
 if [ -e "${ports_work}" ]; then
@@ -55,9 +58,11 @@ for origin in ${PORT_ORIGINS}; do
 	    MACHINE=arm64 MACHINE_ARCH=aarch64 \
 	    TARGET=arm64 TARGET_ARCH=aarch64 ARCH=aarch64 \
 	    OSVERSION="${osversion}" \
-	    PATH="${TOOLBIN}:${PATH}" \
 	    make -C "${port_dir}" -DBATCH \
 	    ALLOW_UNSUPPORTED_SYSTEM=yes \
+	    CC="cc --target=${cross_target} --sysroot=${target_sysroot}" \
+	    CXX="c++ --target=${cross_target} --sysroot=${target_sysroot}" \
+	    CPP="cpp --target=${cross_target} --sysroot=${target_sysroot}" \
 	    SRC_BASE="${FREEBSD_SRC_DIR}" \
 	    KERNBUILDDIR="${KERNBUILDDIR}" \
 	    WRKDIR="${port_work}" \
