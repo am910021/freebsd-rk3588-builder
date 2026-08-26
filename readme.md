@@ -34,54 +34,28 @@ Do not install Python 3.8, `ensurepip`, pipenv, or pip-managed build modules.
 The scripts use the packaged `/usr/local/bin/python3`; U-Boot uses SWIG for
 `pylibfdt` and pyelftools for the Rockchip FIT image assembled by binman.
 
-## Required Build Order
+## Quick Start
 
-Run the following steps in order. Changing the order can produce an incomplete
-or inconsistent image.
+Clone the builder, select the board, and run the five build scripts in the
+exact order shown below. Each step produces inputs consumed by a later step.
 
-1. Clone the builder and enter its directory:
+```sh
+git clone https://github.com/am910021/freebsd-rk3588-builder.git
+cd freebsd-rk3588-builder
+export BOARD=nanopc-t6-lts
+```
 
-   ```sh
-   git clone https://github.com/am910021/freebsd-rk3588-builder.git
-   cd freebsd-rk3588-builder
-   ```
+```text
+checkout.sh -> build-u-boot-2026.07-complete.sh -> build-freebsd-release.sh -> build-ports.sh -> make-freebsd14-image.sh
+```
 
-2. Select the board. Edit `builder.conf` only when other settings need to be
-   customized:
-
-   ```sh
-   export BOARD=nanopc-t6-lts
-   ```
-
-3. Fetch or update all source repositories:
-
-   ```sh
-   ./checkout.sh
-   ```
-
-4. Build the complete U-Boot firmware bundle:
-
-   ```sh
-   ./build-u-boot-2026.07-complete.sh
-   ```
-
-5. Build the FreeBSD base and kernel archives:
-
-   ```sh
-   ./build-freebsd-release.sh
-   ```
-
-6. Build the configured ports:
-
-   ```sh
-   ./build-ports.sh
-   ```
-
-7. Assemble the final FreeBSD image:
-
-   ```sh
-   ./make-freebsd14-image.sh
-   ```
+```sh
+./checkout.sh
+./build-u-boot-2026.07-complete.sh
+./build-freebsd-release.sh
+./build-ports.sh
+./make-freebsd14-image.sh
+```
 
 ## Directory Layout
 
@@ -174,7 +148,7 @@ RKBIN_COMMIT=
 A non-empty `*_COMMIT` overrides the corresponding `*_BRANCH` and resets the
 clean repository to that exact commit.
 
-## Fetching Sources
+## Step 1: Fetch Sources
 
 ```sh
 cd /root/freebsd-rk3588-builder
@@ -185,7 +159,7 @@ If any existing source repository has uncommitted changes, `checkout.sh`
 stops before updating any repository. `BOARD` selects board-level build
 settings and does not affect synchronization of the four source repositories.
 
-## Input Files
+## Build Artifacts
 
 A complete image requires:
 
@@ -197,7 +171,7 @@ work/uboot-latest/
 ```
 
 `base.txz` and `kernel.txz` come from the current FreeBSD arm64 release build.
-They are produced by step 5 using the builder source and object directories.
+They are produced by step 3 using the builder source and object directories.
 
 Default paths:
 
@@ -214,7 +188,7 @@ object tree and arm64 toolchain. Image assembly consumes only the resulting
 packages, installs those packages into the image, and never builds ports
 itself.
 
-## Building U-Boot
+## Step 2: Build U-Boot
 
 `FIRMWARE_MIB` in `builder.conf` selects the firmware size. Run:
 
@@ -326,7 +300,7 @@ boot, and a built-in three-second U-Boot menu:
 NanoPC-T6-LTS-2026.07-R81-LOGO
 ```
 
-## Building FreeBSD Base and Kernel
+## Step 3: Build FreeBSD Base and Kernel
 
 ```sh
 cd /root/freebsd-rk3588-builder
@@ -352,7 +326,7 @@ output/<FreeBSD version>/base.txz
 output/<FreeBSD version>/kernel.txz
 ```
 
-## Building Ports
+## Step 4: Build Ports
 
 ```sh
 ./build-ports.sh
@@ -367,7 +341,7 @@ output/<FreeBSD version>/rk3588-installer-<version>.pkg
 output/<FreeBSD version>/rk3588-installer-<version>.pkg.sha256
 ```
 
-## Building the FreeBSD Image
+## Step 5: Build the FreeBSD Image
 
 Use the default inputs from `builder.conf`:
 

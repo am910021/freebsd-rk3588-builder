@@ -33,52 +33,28 @@ modules。Scripts 直接使用 package 提供的 `/usr/local/bin/python3`；
 U-Boot 以 SWIG 建立 `pylibfdt`，Rockchip FIT image 的 binman 階段則使用
 pyelftools。
 
-## 必要建置順序
+## 快速開始
 
-必須依照以下順序執行。更改順序可能產生不完整或內容不一致的 image。
+Clone builder、選擇 board，接著嚴格依照下列順序執行五支建置腳本。
+每個步驟都會產生後續步驟需要的輸入檔案。
 
-1. Clone builder 並進入目錄：
+```sh
+git clone https://github.com/am910021/freebsd-rk3588-builder.git
+cd freebsd-rk3588-builder
+export BOARD=nanopc-t6-lts
+```
 
-   ```sh
-   git clone https://github.com/am910021/freebsd-rk3588-builder.git
-   cd freebsd-rk3588-builder
-   ```
+```text
+checkout.sh -> build-u-boot-2026.07-complete.sh -> build-freebsd-release.sh -> build-ports.sh -> make-freebsd14-image.sh
+```
 
-2. 選擇 board。只有需要客製化其他參數時才修改 `builder.conf`：
-
-   ```sh
-   export BOARD=nanopc-t6-lts
-   ```
-
-3. 取得或更新所有 source repositories：
-
-   ```sh
-   ./checkout.sh
-   ```
-
-4. 建立完整 U-Boot firmware bundle：
-
-   ```sh
-   ./build-u-boot-2026.07-complete.sh
-   ```
-
-5. 建立 FreeBSD base 與 kernel：
-
-   ```sh
-   ./build-freebsd-release.sh
-   ```
-
-6. 建立設定的 ports：
-
-   ```sh
-   ./build-ports.sh
-   ```
-
-7. 組合最終 FreeBSD image：
-
-   ```sh
-   ./make-freebsd14-image.sh
-   ```
+```sh
+./checkout.sh
+./build-u-boot-2026.07-complete.sh
+./build-freebsd-release.sh
+./build-ports.sh
+./make-freebsd14-image.sh
+```
 
 ## 目錄
 
@@ -169,7 +145,7 @@ RKBIN_COMMIT=
 設定 `*_COMMIT` 時會忽略對應的 `*_BRANCH`，將乾淨的 repository
 重設到指定 commit。
 
-## 取得原始碼
+## 步驟 1：取得原始碼
 
 ```sh
 cd /root/freebsd-rk3588-builder
@@ -180,7 +156,7 @@ BOARD=nanopc-t6-lts ./checkout.sh
 任何 repository 前終止。`BOARD` 只決定板級建置設定，不影響這四個
 source repository 的同步。
 
-## 輸入檔案
+## 建置產物
 
 建立完整 image 前需要：
 
@@ -192,7 +168,7 @@ work/uboot-latest/
 ```
 
 `base.txz` 與 `kernel.txz` 由目前的 FreeBSD arm64 release build 產生。
-它們會在步驟 5 使用 builder 內的 source 與 object 目錄建立。
+它們會在步驟 3 使用 builder 內的 source 與 object 目錄建立。
 
 預設路徑：
 
@@ -208,7 +184,7 @@ KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
 建置 `PORT_ORIGINS` 內的所有 origin。image 組裝會安裝清單內建好的
 package，不會在組裝期間編譯 port。
 
-## 建立 U-Boot
+## 步驟 2：建立 U-Boot
 
 Firmware 大小由 `builder.conf` 的 `FIRMWARE_MIB` 決定，只需執行：
 
@@ -318,7 +294,7 @@ primary 與 redundant environment 各為 64 KiB，位置分別是 `0xf80000`
 NanoPC-T6-LTS-2026.07-R81-LOGO
 ```
 
-## 建立 FreeBSD base 與 kernel
+## 步驟 3：建立 FreeBSD base 與 kernel
 
 ```sh
 cd /root/freebsd-rk3588-builder
@@ -344,7 +320,7 @@ output/<FreeBSD 版本>/base.txz
 output/<FreeBSD 版本>/kernel.txz
 ```
 
-## 建立 Ports
+## 步驟 4：建立 Ports
 
 ```sh
 ./build-ports.sh
@@ -359,7 +335,7 @@ output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg
 output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg.sha256
 ```
 
-## 建立 FreeBSD image
+## 步驟 5：建立 FreeBSD image
 
 使用 `builder.conf` 的預設輸入：
 
