@@ -376,13 +376,14 @@ zfs_load="YES"
 vfs.root.mountfrom="zfs:${ZFS_POOL_NAME}/ROOT/default"
 EOF
 fi
-if [ -f "${BOARD_DIR}/loader.conf" ]; then
-	cat "${BOARD_DIR}/loader.conf" >> "${root_mnt}/boot/loader.conf"
-fi
+# The installer applies loader.conf.board separately to the installed target.
 if [ "${INSTALLER}" = "YES" ]; then
 	cp -p "${root_mnt}/etc/rc.conf" "${payload}/rc.conf.base"
 	sed '/^[[:space:]]*vfs\.root\.mountfrom[[:space:]]*=/d' \
 	    "${root_mnt}/boot/loader.conf" > "${payload}/loader.conf.base"
+fi
+if [ -f "${BOARD_DIR}/loader.conf" ]; then
+	cat "${BOARD_DIR}/loader.conf" >> "${root_mnt}/boot/loader.conf"
 fi
 
 base_sha=$(sha256 -q "${BASE_TXZ}")
