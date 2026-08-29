@@ -31,6 +31,7 @@ die()
 for cmd in make git pkg sha256 readelf tr date cc c++ cpp; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
+host_pkg=$(command -v pkg-static) || die "missing command: pkg-static"
 
 osversion=$(awk '
     $1 == "#define" && $2 == "__FreeBSD_version" { print $3; exit }
@@ -66,6 +67,7 @@ for origin in ${PORT_ORIGINS}; do
 	    SRC_BASE="${FREEBSD_SRC_DIR}" \
 	    KERNBUILDDIR="${KERNBUILDDIR}" \
 	    WRKDIR="${port_work}" \
+	    PKG_BIN="${host_pkg}" \
 	    "PKG_ENV+=ABI_FILE=${FREEBSD_OBJ}/bin/sh/sh" \
 	    stage check-plist package
 

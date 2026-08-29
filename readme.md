@@ -337,14 +337,17 @@ Output:
 ```text
 output/<FreeBSD version>/realtek-rge-kmod-<version>.pkg
 output/<FreeBSD version>/realtek-rge-kmod-<version>.pkg.sha256
+output/<FreeBSD version>/pkg-<version>.pkg
+output/<FreeBSD version>/pkg-<version>.pkg.sha256
 output/<FreeBSD version>/rk3588-installer-<version>.pkg
 output/<FreeBSD version>/rk3588-installer-<version>.pkg.sha256
 output/<FreeBSD version>/rtlbt-firmware-<version>.pkg
 output/<FreeBSD version>/rtlbt-firmware-<version>.pkg.sha256
 ```
 
-`build-ports.sh` builds the two local ports and fetches the architecture-neutral
-`rtlbt-firmware` package from the configured official FreeBSD pkg repository.
+`build-ports.sh` builds the local `pkg`, driver, and installer ports, then
+fetches the architecture-neutral `rtlbt-firmware` package from the configured
+official FreeBSD pkg repository.
 
 ## Step 5: Build the FreeBSD Image
 
@@ -378,6 +381,9 @@ Both `build-u-boot-2026.07-complete.sh` and the image builder use
 - The image installs `rtlbt-firmware`, and the installer payload installs that
   official package into the target system. The target does not register the
   image-only `realtek-rge-kmod` or `rk3588-installer` packages.
+- The image and installer payload include the locally built `pkg` package.
+  This prevents the base-system pkg bootstrap stub from requiring a network
+  connection before local packages can be installed.
 
 An image with only `INSTALLER=YES` becomes usable after installing the
 `rk3588-installer` package later. An image containing only the package has no

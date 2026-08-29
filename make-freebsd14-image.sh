@@ -147,6 +147,15 @@ root_mnt=
 esp_mnt=
 AUTO_WORK=0
 
+pkg_package=
+for candidate in "${TXZ_ROOT}"/pkg-*.pkg; do
+	[ -f "${candidate}" ] || continue
+	[ -z "${pkg_package}" ] ||
+	    die "multiple pkg packages in ${TXZ_ROOT}"
+	pkg_package=${candidate}
+done
+[ -n "${pkg_package}" ] || die "no pkg package found in ${TXZ_ROOT}"
+
 if [ -z "${rge_pkg}" ]; then
 	for candidate in "${TXZ_ROOT}"/realtek-rge-kmod-*.pkg; do
 		[ -f "${candidate}" ] || continue
@@ -201,7 +210,8 @@ cleanup()
 	fi
 }
 
-for file in "${rge_pkg}" "${rtlbt_pkg}" "${UBOOT_BIN}" "${UBOOT_UPDATE_BIN}" \
+for file in "${pkg_package}" "${rge_pkg}" "${rtlbt_pkg}" "${UBOOT_BIN}" \
+    "${UBOOT_UPDATE_BIN}" \
     "${IDBLOADER}" "${UBOOT_ITB}" "${BOOTMENU_FILE}" "${FREEBSD_DTB}" \
     "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
@@ -279,10 +289,17 @@ if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 fi
 tar -xpf "${BASE_TXZ}" -C "${root_mnt}"
 tar -xpf "${KERNEL_TXZ}" -C "${root_mnt}"
-ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${rge_pkg}"
-ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${rtlbt_pkg}"
+ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
+    add "${pkg_package}"
+[ -x "${root_mnt}/usr/local/sbin/pkg" ] ||
+    die "pkg package did not install /usr/local/sbin/pkg"
+ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
+    add "${rge_pkg}"
+ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
+    add "${rtlbt_pkg}"
 if [ -n "${installer_pkg}" ]; then
-	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${installer_pkg}"
+	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
+	    add "${installer_pkg}"
 fi
 if [ -d "${BOARD_FILES_DIR}" ]; then
 	(cd "${BOARD_FILES_DIR}" && tar -cpf - .) |
@@ -307,6 +324,7 @@ if [ "${INSTALLER}" = "YES" ]; then
 		sh "${MANIFEST_SCRIPT}" base.txz kernel.txz > MANIFEST
 	)
 	cp -p "${UBOOT_UPDATE_BIN}" "${payload}/firmware-update.bin"
+	cp -p "${pkg_package}" "${payload}/pkg.pkg"
 	cp -p "${rge_pkg}" "${payload}/if_rge.pkg"
 	cp -p "${rtlbt_pkg}" "${payload}/rtlbt-firmware.pkg"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
@@ -400,6 +418,7 @@ fi
 
 base_sha=$(sha256 -q "${BASE_TXZ}")
 kernel_sha=$(sha256 -q "${KERNEL_TXZ}")
+pkg_sha=$(sha256 -q "${pkg_package}")
 rge_sha=$(sha256 -q "${rge_pkg}")
 firmware_sha=$(sha256 -q "${UBOOT_BIN}")
 firmware_update_sha=$(sha256 -q "${UBOOT_UPDATE_BIN}")
@@ -415,6 +434,7 @@ Board: ${BOARD}
 FreeBSD source commit: ${src_commit}
 base.txz: ${base_sha}
 kernel.txz: ${kernel_sha}
+pkg.pkg: ${pkg_sha}
 if_rge.pkg: ${rge_sha}
 firmware.bin: ${firmware_sha}
 firmware-update.bin: ${firmware_update_sha}
@@ -539,6 +559,8 @@ U-Boot update payload: ${UBOOT_UPDATE_BIN}
 U-Boot update payload SHA256: ${firmware_update_sha}
 FreeBSD DTB: ${FREEBSD_DTB}
 U-Boot FDT overlays: ${UBOOT_FDT_OVERLAYS}
+pkg.pkg: ${pkg_package}
+pkg.pkg SHA256: ${pkg_sha}
 if_rge.pkg: ${rge_pkg}
 if_rge.pkg SHA256: ${rge_sha}
 Layout:
