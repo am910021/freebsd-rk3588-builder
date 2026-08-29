@@ -19,6 +19,24 @@
 	};
 };
 
+&cru {
+	/*
+	 * FreeBSD does not yet drive AUPLL and this board's audio path is not
+	 * adapted.  A zero rate keeps the U-Boot 24 MHz bypass state without
+	 * asking the fixed-rate clock model to program Linux's 786.432 MHz rate.
+	 */
+	assigned-clock-rates =
+		<1100000000>, <0>,
+		<850000000>, <1188000000>,
+		<702000000>,
+		<400000000>, <500000000>,
+		<800000000>, <100000000>,
+		<400000000>, <100000000>,
+		<200000000>, <500000000>,
+		<375000000>, <150000000>,
+		<200000000>;
+};
+
 &u2phy0_otg {
 	phy-supply = <&vbus5v0_usb>;
 };
