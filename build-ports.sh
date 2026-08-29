@@ -109,3 +109,28 @@ for origin in ${PORT_ORIGINS}; do
 	done
 	[ "${found}" = "1" ] || die "no package produced for ${origin}"
 done
+
+rtlbt_fetch=${ports_work}/rtlbt-firmware-fetch
+mkdir -p "${rtlbt_fetch}"
+pkg fetch -y -o "${rtlbt_fetch}" rtlbt-firmware
+set -- $(find "${rtlbt_fetch}" -type f -name 'rtlbt-firmware-*.pkg')
+[ "$#" -eq 1 ] || die "expected one fetched rtlbt-firmware package"
+package=$1
+pkg_origin=$(pkg query -F "${package}" '%o')
+pkg_abi=$(pkg query -F "${package}" '%q')
+pkg_version=$(pkg query -F "${package}" '%v')
+[ "${pkg_origin}" = "comms/rtlbt-firmware" ] ||
+	die "unexpected rtlbt-firmware origin: ${pkg_origin}"
+[ "${pkg_abi}" = "FreeBSD:${FREEBSD_OBJ_VERSION%%.*}:*" ] ||
+	die "unexpected rtlbt-firmware ABI: ${pkg_abi}"
+for existing in "${TXZ_ROOT}"/rtlbt-firmware-*.pkg; do
+	[ -f "${existing}" ] || continue
+	archive=${BUILDER_ROOT}/ready-to-delete/ports-output-$(date +%Y%m%d-%H%M%S)-$$
+	mkdir -p "${archive}"
+	mv "${existing}" "${archive}/"
+	[ ! -e "${existing}.sha256" ] || mv "${existing}.sha256" "${archive}/"
+done
+output_package=${TXZ_ROOT}/rtlbt-firmware-${pkg_version}.pkg
+cp -p "${package}" "${output_package}"
+sha256 "${output_package}" > "${output_package}.sha256"
+echo "Package: ${output_package}"

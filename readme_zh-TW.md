@@ -333,7 +333,12 @@ output/<FreeBSD 版本>/realtek-rge-kmod-<版本>.pkg
 output/<FreeBSD 版本>/realtek-rge-kmod-<版本>.pkg.sha256
 output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg
 output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg.sha256
+output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg
+output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg.sha256
 ```
+
+`build-ports.sh` 會建立兩個本地 ports，並從已設定的 FreeBSD 官方 pkg
+repository 擷取架構無關的 `rtlbt-firmware` package。
 
 ## 步驟 5：建立 FreeBSD image
 
@@ -364,6 +369,9 @@ output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg.sha256
   `rk3588-installer` package。
 - `INSTALLER=YES` 只負責放入 `base.txz`、`kernel.txz`、firmware、DTB
   與 U-Boot menu payload，不會自行安裝 package。
+- image 會安裝 `rtlbt-firmware`，installer payload 也會將這個官方
+  package 安裝到目標系統。目標系統不會登記只供 image 使用的
+  `realtek-rge-kmod` 或 `rk3588-installer` package。
 
 只有 `INSTALLER=YES` 的 image，可以日後再安裝 `rk3588-installer`
 package 後使用。只有 package 而沒有 payload 時，`rk3588-install`

@@ -158,6 +158,16 @@ if [ -z "${rge_pkg}" ]; then
 	    die "no if_rge package found in ${TXZ_ROOT}"
 fi
 
+rtlbt_pkg=
+for candidate in "${TXZ_ROOT}"/rtlbt-firmware-*.pkg; do
+	[ -f "${candidate}" ] || continue
+	[ -z "${rtlbt_pkg}" ] ||
+	    die "multiple rtlbt-firmware packages in ${TXZ_ROOT}"
+	rtlbt_pkg=${candidate}
+done
+[ -n "${rtlbt_pkg}" ] ||
+    die "no rtlbt-firmware package found in ${TXZ_ROOT}"
+
 installer_pkg=
 case " ${PORT_ORIGINS} " in
 *" sysutils/rk3588-installer "*)
@@ -191,7 +201,7 @@ cleanup()
 	fi
 }
 
-for file in "${rge_pkg}" "${UBOOT_BIN}" "${UBOOT_UPDATE_BIN}" \
+for file in "${rge_pkg}" "${rtlbt_pkg}" "${UBOOT_BIN}" "${UBOOT_UPDATE_BIN}" \
     "${IDBLOADER}" "${UBOOT_ITB}" "${BOOTMENU_FILE}" "${FREEBSD_DTB}" \
     "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
@@ -270,6 +280,7 @@ fi
 tar -xpf "${BASE_TXZ}" -C "${root_mnt}"
 tar -xpf "${KERNEL_TXZ}" -C "${root_mnt}"
 ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${rge_pkg}"
+ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${rtlbt_pkg}"
 if [ -n "${installer_pkg}" ]; then
 	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" add "${installer_pkg}"
 fi
@@ -297,6 +308,7 @@ if [ "${INSTALLER}" = "YES" ]; then
 	)
 	cp -p "${UBOOT_UPDATE_BIN}" "${payload}/firmware-update.bin"
 	cp -p "${rge_pkg}" "${payload}/if_rge.pkg"
+	cp -p "${rtlbt_pkg}" "${payload}/rtlbt-firmware.pkg"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
 	cp -p "${BOOTMENU_FILE}" "${payload}/bootmenu.env"
 	if [ -f "${BOARD_DIR}/loader.conf" ]; then
