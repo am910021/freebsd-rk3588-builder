@@ -209,7 +209,6 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 ├── freebsd-runtime.dtb
 ├── logo.bmp
 ├── logo.img
-├── bootmenu.env
 ├── nanopc-t6-lts-uboot-16m.bin
 ├── firmware-update.bin
 ├── FIRMWARE-LAYOUT.txt
@@ -219,22 +218,25 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 
 `work/uboot-latest` 會指向最新完成的 bundle。
 
-映像檔會將 `bootmenu.env` 安裝為 `/bootmenu.env`。U-Boot 只會匯入
-`bootmenu_title`、`bootmenu_delay` 與 `logo_delay`，再依 eMMC、SD、USB、NVMe、
-SATA/SCSI 順序尋找 `/EFI/FreeBSD/loader.efi` 並動態產生選單。
-`freebsd_default_boot` 指定優先目標；目標不存在時會退回第一個找到的
-loader。
+U-Boot 會依 eMMC、SD、USB、NVMe、SATA/SCSI 順序尋找
+`/EFI/FreeBSD/loader.efi` 並動態產生選單。持久選單設定保存在 U-Boot
+redundant raw environment。
 
-FreeBSD 可在已掛載的 ESP 寫入單一嚴格格式的 `/uboot-env.request`，
-要求變更預設目標，例如：
+安裝後的 `rk3588-uboot-config` 指令會在已掛載的 ESP 寫入經驗證的
+request，並可在同一筆 request 變更多個設定：
 
-```text
-freebsd_default_boot=mmc1:2
+```sh
+rk3588-uboot-config set \
+    freebsd_default_boot=usb0:2 \
+    bootmenu_delay=5 \
+    'bootmenu_title=*** FreeBSD U-Boot Boot Menu ***'
 ```
 
-下次啟動時，U-Boot 會把設定寫入與自身開機來源相同儲存裝置上的
-redundant raw environment，成功後才移除 request。`saveenv` 失敗時會
-保留 request。
+允許的設定為 `freebsd_default_boot`、`bootmenu_title`、
+`bootmenu_delay` 與 `logo_delay`。下次啟動時會依 eMMC、SD、USB、NVMe、
+SATA/SCSI 順序套用第一筆有效 request。只有設定值改變時才會寫入 raw
+environment，成功後移除所有已初始化儲存裝置上的
+`/uboot-env.request`；environment 寫入失敗時則全部保留。
 
 ### Device trees
 
@@ -335,6 +337,8 @@ output/<FreeBSD 版本>/pkg-<版本>.pkg
 output/<FreeBSD 版本>/pkg-<版本>.pkg.sha256
 output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg
 output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg.sha256
+output/<FreeBSD 版本>/rk3588-uboot-config-<版本>.pkg
+output/<FreeBSD 版本>/rk3588-uboot-config-<版本>.pkg.sha256
 output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg
 output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg.sha256
 ```
@@ -370,8 +374,10 @@ package。
 
 - `PORT_ORIGINS` 包含 `sysutils/rk3588-installer` 時，image 會安裝
   `rk3588-installer` package。
+- image 與 installer 安裝完成的目標都會保留 `rk3588-uboot-config`；
+  installer payload 內含其離線 package。
 - `INSTALLER=YES` 只負責放入 `base.txz`、`kernel.txz`、firmware、DTB
-  與 U-Boot menu payload，不會自行安裝 package。
+  與離線 packages，不會自行安裝 installer package。
 - image 會安裝 `rtlbt-firmware`，installer payload 也會將這個官方
   package 安裝到目標系統。目標系統不會登記只供 image 使用的
   `realtek-rge-kmod` 或 `rk3588-installer` package。

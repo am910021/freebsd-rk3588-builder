@@ -76,7 +76,6 @@ UBOOT_BIN=${UBOOT_DIR}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin
 UBOOT_UPDATE_BIN=${UBOOT_DIR}/firmware-update.bin
 IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb
-BOOTMENU_FILE=${UBOOT_DIR}/bootmenu.env
 MANIFEST_SCRIPT=${FREEBSD_SRC_DIR}/release/scripts/make-manifest.sh
 
 die()
@@ -191,6 +190,16 @@ case " ${PORT_ORIGINS} " in
 	;;
 esac
 
+uboot_config_pkg=
+for candidate in "${TXZ_ROOT}"/rk3588-uboot-config-*.pkg; do
+	[ -f "${candidate}" ] || continue
+	[ -z "${uboot_config_pkg}" ] ||
+	    die "multiple rk3588-uboot-config packages in ${TXZ_ROOT}"
+	uboot_config_pkg=${candidate}
+done
+[ -n "${uboot_config_pkg}" ] ||
+    die "no rk3588-uboot-config package found in ${TXZ_ROOT}"
+
 cleanup()
 {
 	if [ -n "${esp_mnt}" ]; then
@@ -210,9 +219,10 @@ cleanup()
 	fi
 }
 
-for file in "${pkg_package}" "${rge_pkg}" "${rtlbt_pkg}" "${UBOOT_BIN}" \
+for file in "${pkg_package}" "${rge_pkg}" "${rtlbt_pkg}" \
+    "${uboot_config_pkg}" "${UBOOT_BIN}" \
     "${UBOOT_UPDATE_BIN}" \
-    "${IDBLOADER}" "${UBOOT_ITB}" "${BOOTMENU_FILE}" "${FREEBSD_DTB}" \
+    "${IDBLOADER}" "${UBOOT_ITB}" "${FREEBSD_DTB}" \
     "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
@@ -297,6 +307,8 @@ ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
     add "${rge_pkg}"
 ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
     add "${rtlbt_pkg}"
+ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
+    add "${uboot_config_pkg}"
 if [ -n "${installer_pkg}" ]; then
 	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
 	    add "${installer_pkg}"
@@ -327,8 +339,8 @@ if [ "${INSTALLER}" = "YES" ]; then
 	cp -p "${pkg_package}" "${payload}/pkg.pkg"
 	cp -p "${rge_pkg}" "${payload}/if_rge.pkg"
 	cp -p "${rtlbt_pkg}" "${payload}/rtlbt-firmware.pkg"
+	cp -p "${uboot_config_pkg}" "${payload}/uboot-config.pkg"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
-	cp -p "${BOOTMENU_FILE}" "${payload}/bootmenu.env"
 	if [ -f "${BOARD_DIR}/loader.conf" ]; then
 		cp -p "${BOARD_DIR}/loader.conf" "${payload}/loader.conf.board"
 	fi
@@ -420,6 +432,7 @@ base_sha=$(sha256 -q "${BASE_TXZ}")
 kernel_sha=$(sha256 -q "${KERNEL_TXZ}")
 pkg_sha=$(sha256 -q "${pkg_package}")
 rge_sha=$(sha256 -q "${rge_pkg}")
+uboot_config_sha=$(sha256 -q "${uboot_config_pkg}")
 firmware_sha=$(sha256 -q "${UBOOT_BIN}")
 firmware_update_sha=$(sha256 -q "${UBOOT_UPDATE_BIN}")
 idb_sha=$(sha256 -q "${IDBLOADER}")
@@ -436,6 +449,7 @@ base.txz: ${base_sha}
 kernel.txz: ${kernel_sha}
 pkg.pkg: ${pkg_sha}
 if_rge.pkg: ${rge_sha}
+rk3588-uboot-config.pkg: ${uboot_config_sha}
 firmware.bin: ${firmware_sha}
 firmware-update.bin: ${firmware_update_sha}
 idbloader.img: ${idb_sha}
@@ -508,7 +522,6 @@ printf 'fdt_overlays=%s\n' "${UBOOT_FDT_OVERLAYS}" \
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/BOOT/BOOTAA64.EFI"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/FreeBSD/loader.efi"
 cp -p "${FREEBSD_DTB}" "${esp_mnt}${FREEBSD_DTB_ESP_PATH}"
-cp -p "${BOOTMENU_FILE}" "${esp_mnt}/bootmenu.env"
 sync
 umount "${esp_mnt}"
 esp_mnt=
@@ -559,6 +572,8 @@ pkg.pkg: ${pkg_package}
 pkg.pkg SHA256: ${pkg_sha}
 if_rge.pkg: ${rge_pkg}
 if_rge.pkg SHA256: ${rge_sha}
+rk3588-uboot-config.pkg: ${uboot_config_pkg}
+rk3588-uboot-config.pkg SHA256: ${uboot_config_sha}
 Layout:
   p1 firmware:   0-${FIRMWARE_MIB} MiB
   p2 ESP:        ${FIRMWARE_MIB}-${ESP_END_MIB} MiB

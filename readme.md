@@ -213,7 +213,6 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 |-- freebsd-runtime.dtb
 |-- logo.bmp
 |-- logo.img
-|-- bootmenu.env
 |-- nanopc-t6-lts-uboot-16m.bin
 |-- firmware-update.bin
 |-- FIRMWARE-LAYOUT.txt
@@ -223,22 +222,26 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 
 `work/uboot-latest` points to the most recently completed bundle.
 
-The image installs `bootmenu.env` as `/bootmenu.env`. U-Boot imports only
-`bootmenu_title`, `bootmenu_delay`, and `logo_delay`. It discovers
-`/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and SATA/SCSI, in that
-order, and builds the menu dynamically. `freebsd_default_boot` selects the
-preferred target; an absent target falls back to the first discovered loader.
+U-Boot discovers `/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and
+SATA/SCSI, in that order, and builds the menu dynamically. Persistent menu
+settings are kept in U-Boot's redundant raw environment.
 
-FreeBSD can request a new default by writing one strict line to the mounted
-ESP as `/uboot-env.request`, for example:
+The installed `rk3588-uboot-config` command writes a validated request to the
+mounted ESP. Multiple settings can be changed in one transaction:
 
-```text
-freebsd_default_boot=mmc1:2
+```sh
+rk3588-uboot-config set \
+    freebsd_default_boot=usb0:2 \
+    bootmenu_delay=5 \
+    'bootmenu_title=*** FreeBSD U-Boot Boot Menu ***'
 ```
 
-The next U-Boot startup saves the value to the redundant raw environment on
-the same storage that supplied U-Boot, then removes the request. A failed
-`saveenv` leaves the request in place.
+Allowed settings are `freebsd_default_boot`, `bootmenu_title`,
+`bootmenu_delay`, and `logo_delay`. The first valid request found in eMMC,
+SD, USB, NVMe, then SATA/SCSI order is applied at the next startup. U-Boot
+saves the raw environment only when a value changed, then removes every
+`/uboot-env.request` found on initialized storage. A failed environment save
+leaves every request in place.
 
 ### Device Trees
 
@@ -341,6 +344,8 @@ output/<FreeBSD version>/pkg-<version>.pkg
 output/<FreeBSD version>/pkg-<version>.pkg.sha256
 output/<FreeBSD version>/rk3588-installer-<version>.pkg
 output/<FreeBSD version>/rk3588-installer-<version>.pkg.sha256
+output/<FreeBSD version>/rk3588-uboot-config-<version>.pkg
+output/<FreeBSD version>/rk3588-uboot-config-<version>.pkg.sha256
 output/<FreeBSD version>/rtlbt-firmware-<version>.pkg
 output/<FreeBSD version>/rtlbt-firmware-<version>.pkg.sha256
 ```
@@ -376,8 +381,10 @@ Both `build-u-boot-2026.07-complete.sh` and the image builder use
 
 - Including `sysutils/rk3588-installer` in `PORT_ORIGINS` installs the
   `rk3588-installer` package into the image.
-- `INSTALLER=YES` embeds `base.txz`, `kernel.txz`, firmware, DTB, and U-Boot
-  menu payloads. It does not install the package by itself.
+- The image and every installed target include `rk3588-uboot-config`; the
+  installer carries its package in the offline payload.
+- `INSTALLER=YES` embeds `base.txz`, `kernel.txz`, firmware, DTB, and the
+  offline packages. It does not install the installer package by itself.
 - The image installs `rtlbt-firmware`, and the installer payload installs that
   official package into the target system. The target does not register the
   image-only `realtek-rge-kmod` or `rk3588-installer` packages.
