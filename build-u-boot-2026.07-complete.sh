@@ -47,8 +47,8 @@ case "${UBOOT_LOGO_ENABLE}" in
 		;;
 esac
 
-for file in "${UBOOT_BL31}" "${UBOOT_ROCKCHIP_TPL}" "${BOOTMENU_ENV}" \
-    "${LOGO_BMP}" "${FREEBSD_DTS}"; do
+for file in "${UBOOT_BL31}" "${UBOOT_ROCKCHIP_TPL}" "${LOGO_BMP}" \
+    "${FREEBSD_DTS}"; do
 	[ -f "${file}" ] || fail "missing input: ${file}"
 done
 [ -n "${UBOOT_BRANCH}${UBOOT_COMMIT}" ] ||
@@ -144,7 +144,6 @@ cp -p "${BUILD_DIR}/u-boot.bin" "${OUT}/u-boot.bin"
 cp -p "${BUILD_DIR}/u-boot.dtb" "${OUT}/uboot-control.dtb"
 cp -p "${BUILD_DIR}/.config" "${OUT}/u-boot.config"
 cp -p "${LOGO_BMP}" "${OUT}/logo.bmp"
-cp -p "${BOOTMENU_ENV}" "${OUT}/bootmenu.env"
 
 python3 - "${OUT}" "${FIRMWARE_MIB}" "${UBOOT_LOGO_ENABLE}" \
     "${BOARD}" "${UBOOT_BINARY_MARKER}" <<'PY'
@@ -167,32 +166,15 @@ env_offset_redund = 0xf90000
 env_size = 0x10000
 env_reserve_end = 16 * mib
 
-menu = (out / "bootmenu.env").read_text(encoding="utf-8").splitlines()
-allowed = {"bootmenu_title", "bootmenu_delay", "logo_delay"}
-entries = set()
-for line in menu:
-    line = line.strip()
-    if not line or line.startswith("#"):
-        continue
-    name, separator, _ = line.partition("=")
-    if not separator or name not in allowed:
-        raise SystemExit(f"invalid bootmenu.env line: {line!r}")
-    entries.add(name)
-if entries != allowed:
-    raise SystemExit(
-        "bootmenu.env must set bootmenu_title, bootmenu_delay, and logo_delay"
-    )
-
 binary = (out / "u-boot.bin").read_bytes()
 for marker in (
     binary_marker,
     b"bootmenu_delay=3",
     b"logo_delay=0",
-    b"bootmenu_config=/bootmenu.env",
     b"logo_enable=" + logo_enable,
-    b"load_bootmenu=",
     b"show_logo=",
     b"freebsdboot",
+    b"/uboot-env.request",
     b"boot_freebsd_target=",
     b"freebsd_default_boot=auto",
     b"rk_boot_storage",
@@ -272,7 +254,6 @@ Cross compile: ${CROSS_COMPILE}
 Jobs: ${JOBS}
 Logo: ${LOGO_BMP}
 Logo enabled: ${UBOOT_LOGO_ENABLE}
-ESP menu: ${BOOTMENU_ENV}
 FreeBSD DTS: ${FREEBSD_DTS}
 Firmware image: ${BOARD}-uboot-${FIRMWARE_MIB}m.bin
 Firmware update image: firmware-update.bin
@@ -283,7 +264,7 @@ EOF
 	cd "${OUT}"
 	sha256 idbloader.img u-boot.itb u-boot.bin u-boot.config \
 	    uboot-control.dtb freebsd-runtime.dtb \
-	    logo.bmp logo.img bootmenu.env \
+	    logo.bmp logo.img \
 	    "${BOARD}-uboot-${FIRMWARE_MIB}m.bin" \
 	    firmware-update.bin \
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt > SHA256SUMS
