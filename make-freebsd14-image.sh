@@ -509,10 +509,6 @@ cp -p "${loader_tmp}" "${esp_mnt}/EFI/BOOT/BOOTAA64.EFI"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/FreeBSD/loader.efi"
 cp -p "${FREEBSD_DTB}" "${esp_mnt}${FREEBSD_DTB_ESP_PATH}"
 cp -p "${BOOTMENU_FILE}" "${esp_mnt}/bootmenu.env"
-if [ "${ROOTFS_TYPE}" = "zfs" ]; then
-	printf 'rootdev=zfs:%s/ROOT/default:\n' "${ZFS_POOL_NAME}" \
-	    > "${esp_mnt}/EFI/FreeBSD/loader.env"
-fi
 sync
 umount "${esp_mnt}"
 esp_mnt=
