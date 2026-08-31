@@ -19,12 +19,6 @@ check_repo()
 		echo "error: $dir exists but is not a Git repository" >&2
 		exit 1
 	fi
-
-	if [ -n "$(git -C "$dir" status --porcelain)" ]; then
-		echo "error: $dir has uncommitted changes" >&2
-		git -C "$dir" status --short >&2
-		exit 1
-	fi
 }
 
 sync_repo()
@@ -55,6 +49,9 @@ sync_repo()
 		git -C "$dir" fetch --prune origin
 	fi
 
+	git -C "$dir" reset --hard HEAD
+	git -C "$dir" clean -ffdx
+
 	if [ -n "$commit" ]; then
 		git -C "$dir" reset --hard "$commit"
 		return
@@ -66,16 +63,12 @@ sync_repo()
 		git -C "$dir" checkout -b "$branch" --track "origin/$branch"
 	fi
 	git -C "$dir" branch --set-upstream-to="origin/$branch" "$branch"
-	if [ -n "$depth" ]; then
-		git -C "$dir" merge --ff-only "origin/$branch"
-	else
-		git -C "$dir" pull --ff-only
-	fi
+	git -C "$dir" reset --hard "origin/$branch"
 }
 
 mkdir -p "${WORK_ROOT}" "${OUTPUT_ROOT}" "${SRC_ROOT}"
 
-# Check every existing repository before changing any of them.
+# Validate every existing path before changing any repository.
 check_repo "${FREEBSD_SRC_DIR}"
 check_repo "${UBOOT_SRC_DIR}"
 check_repo "${RKBIN_SRC_DIR}"

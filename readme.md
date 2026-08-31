@@ -155,9 +155,11 @@ cd /root/freebsd-rk3588-builder
 BOARD=nanopc-t6-lts ./checkout.sh
 ```
 
-If any existing source repository has uncommitted changes, `checkout.sh`
-stops before updating any repository. `BOARD` selects board-level build
-settings and does not affect synchronization of the four source repositories.
+`checkout.sh` forcibly restores every existing source repository to its
+configured remote branch or pinned commit after a successful fetch. It removes
+local commits, tracked changes, untracked files, and ignored files without a
+backup. `BOARD` selects board-level build settings and does not affect
+synchronization of the four source repositories.
 
 ## Build Artifacts
 

@@ -152,9 +152,10 @@ cd /root/freebsd-rk3588-builder
 BOARD=nanopc-t6-lts ./checkout.sh
 ```
 
-如果任何既有 source repository 有未提交修改，`checkout.sh` 會在更新
-任何 repository 前終止。`BOARD` 只決定板級建置設定，不影響這四個
-source repository 的同步。
+remote fetch 成功後，`checkout.sh` 會強制將每個既有 source repository
+還原到設定的遠端分支或指定 commit。本地額外 commit、tracked 異動、
+untracked 檔案與 ignored 檔案都會直接刪除且不備份。`BOARD` 只決定板級
+建置設定，不影響這四個 source repository 的同步。
 
 ## 建置產物
 
