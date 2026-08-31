@@ -115,6 +115,7 @@ STAGING_OUT=$(mktemp -d \
 OUT=${STAGING_OUT}
 BUILD_DIR=${WORK}/build
 BUILD_SOURCE_DIR=${UBOOT_SRC_DIR}
+BUILD_SOURCE_COMMIT=${SOURCE_COMMIT}
 
 if [ -n "${UBOOT_SOURCE_FILES_DIR}${UBOOT_SOURCE_PATCH_DIR}" ]; then
 	BUILD_SOURCE_DIR=${WORK}/source
@@ -131,6 +132,17 @@ if [ -n "${UBOOT_SOURCE_FILES_DIR}${UBOOT_SOURCE_PATCH_DIR}" ]; then
 	if [ -n "${UBOOT_SOURCE_FILES_DIR}" ]; then
 		(cd "${UBOOT_SOURCE_FILES_DIR}" && tar -cpf - .) |
 		    (cd "${BUILD_SOURCE_DIR}" && tar -xpf -)
+	fi
+	if [ -n "$(git -C "${BUILD_SOURCE_DIR}" status --porcelain)" ]; then
+		SOURCE_COMMIT_DATE=$(git -C "${UBOOT_SRC_DIR}" show -s \
+		    --format=%cI "${SOURCE_COMMIT}")
+		git -C "${BUILD_SOURCE_DIR}" add -A
+		env GIT_AUTHOR_DATE="${SOURCE_COMMIT_DATE}" \
+		    GIT_COMMITTER_DATE="${SOURCE_COMMIT_DATE}" \
+		    git -C "${BUILD_SOURCE_DIR}" \
+		    -c user.name=Yuri -c user.email=am910021@gmail.com \
+		    commit --quiet -m "builder: apply ${BOARD} source overlay"
+		BUILD_SOURCE_COMMIT=$(git -C "${BUILD_SOURCE_DIR}" rev-parse HEAD)
 	fi
 fi
 
@@ -273,6 +285,7 @@ Board: ${BOARD}
 U-Boot source: ${UBOOT_SRC_DIR}
 Source branch: ${SOURCE_BRANCH}
 Source commit: ${SOURCE_COMMIT}
+Build source commit: ${BUILD_SOURCE_COMMIT}
 Source files: ${UBOOT_SOURCE_FILES_DIR:-none}
 Source patches: ${UBOOT_SOURCE_PATCH_DIR:-none}
 BL31: ${UBOOT_BL31}
