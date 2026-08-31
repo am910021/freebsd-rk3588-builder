@@ -87,12 +87,14 @@ freebsd-rk3588-builder/
 
 ```text
 boards/nanopc-t6-lts/board.conf
+boards/g98/board.conf
 ```
 
 所有設定都可以用環境變數覆蓋。常用項目：
 
 ```sh
 export BOARD=nanopc-t6-lts
+# 或：export BOARD=g98
 FIRMWARE_MIB=16
 ESP_SIZE_MIB=256
 SWAP_SIZE_MIB=512
@@ -117,15 +119,18 @@ env ROOTFS_TYPE=zfs ROOT_SIZE_MIB=2048 \
 NanoPC-T6 LTS 的 board 設定將 ZFS pool 設為 `nanopc_t6`，bootfs 為
 `nanopc_t6/ROOT/default`。可以用 `ZFS_POOL_NAME` 覆蓋 pool 名稱。
 
-每個 board 指定衍生自 U-Boot upstream DTS 的 FreeBSD DTS：
+每個 board 都使用相同的外層結構：`board.conf`、`assets/`、`dts/`，以及
+可選的 `loader.conf`。每個 board 指定衍生自 U-Boot upstream DTS 的
+FreeBSD DTS：
 
 ```sh
 FREEBSD_DTS=${BOARD_DIR}/dts/rk3588-nanopc-t6-lts-freebsd.dts
 ```
 
-U-Boot control DTB 由 `src/u-boot-2026.07` 的
-`nanopc-t6-rk3588_defconfig` 建置，不再嵌入 vendor 2017 的 runtime
-DTB。
+U-Boot control DTB 使用 `board.conf` 選定的 defconfig 建置。G98 尚未
+進入 upstream 的 board 檔案放在 `boards/g98/u-boot/`；建置時會在臨時
+source clone 中套用，不會修改 `src/u-boot-2026.07`。系統不再嵌入
+vendor 2017 的 runtime DTB。
 
 Git 來源可以使用 branch，或用 commit 固定版本：
 

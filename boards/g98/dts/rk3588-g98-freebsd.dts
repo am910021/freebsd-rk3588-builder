@@ -1,0 +1,16 @@
+/*-
+ * SPDX-License-Identifier: BSD-2-Clause
+ *
+ * Copyright (c) 2026 Fang, Wei-Xiang (Yuri) <am910021@gmail.com>
+ */
+
+/dts-v1/;
+
+#include "rk3588.dtsi"
+#include "rk3588-g98-base.dtsi"
+#include "rk3588-g98.dtsi"
+
+/ {
+	model = "G98 RK3588";
+	compatible = "g98,rk3588", "rockchip,rk3588";
+};

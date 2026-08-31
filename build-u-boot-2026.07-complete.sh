@@ -58,7 +58,13 @@ done
 [ -n "${UBOOT_BINARY_MARKER}" ] ||
     fail "UBOOT_BINARY_MARKER is not configured"
 [ -d "${UBOOT_SRC_DIR}" ] || fail "missing source: ${UBOOT_SRC_DIR}"
-for cmd in git gmake bison mktemp python3 sha256 swig; do
+[ -z "${UBOOT_SOURCE_FILES_DIR}" ] ||
+    [ -d "${UBOOT_SOURCE_FILES_DIR}" ] ||
+    fail "missing U-Boot source files: ${UBOOT_SOURCE_FILES_DIR}"
+[ -z "${UBOOT_SOURCE_PATCH_DIR}" ] ||
+    [ -d "${UBOOT_SOURCE_PATCH_DIR}" ] ||
+    fail "missing U-Boot source patches: ${UBOOT_SOURCE_PATCH_DIR}"
+for cmd in git gmake bison mktemp python3 sha256 swig tar; do
 	command -v "${cmd}" >/dev/null 2>&1 || fail "missing command: ${cmd}"
 done
 command -v "${CROSS_COMPILE}gcc" >/dev/null 2>&1 ||
@@ -108,16 +114,35 @@ STAGING_OUT=$(mktemp -d \
     "${WORK_ROOT}/tmp/${BOARD}-uboot-${UBOOT_VERSION}-${FIRMWARE_MIB}m.XXXXXX")
 OUT=${STAGING_OUT}
 BUILD_DIR=${WORK}/build
+BUILD_SOURCE_DIR=${UBOOT_SRC_DIR}
 
-gmake -C "${UBOOT_SRC_DIR}" O="${BUILD_DIR}" \
+if [ -n "${UBOOT_SOURCE_FILES_DIR}${UBOOT_SOURCE_PATCH_DIR}" ]; then
+	BUILD_SOURCE_DIR=${WORK}/source
+	git clone --quiet --shared --no-checkout "${UBOOT_SRC_DIR}" \
+	    "${BUILD_SOURCE_DIR}"
+	git -C "${BUILD_SOURCE_DIR}" checkout --quiet --detach \
+	    "${SOURCE_COMMIT}"
+	if [ -n "${UBOOT_SOURCE_PATCH_DIR}" ]; then
+		for patch in "${UBOOT_SOURCE_PATCH_DIR}"/*.patch; do
+			[ -f "${patch}" ] || continue
+			git -C "${BUILD_SOURCE_DIR}" apply "${patch}"
+		done
+	fi
+	if [ -n "${UBOOT_SOURCE_FILES_DIR}" ]; then
+		(cd "${UBOOT_SOURCE_FILES_DIR}" && tar -cpf - .) |
+		    (cd "${BUILD_SOURCE_DIR}" && tar -xpf -)
+	fi
+fi
+
+gmake -C "${BUILD_SOURCE_DIR}" O="${BUILD_DIR}" \
     CROSS_COMPILE="${CROSS_COMPILE}" "${UBOOT_DEFCONFIG}"
-"${UBOOT_SRC_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
+"${BUILD_SOURCE_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
     --disable TOOLS_MKEFICAPSULE
-"${UBOOT_SRC_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
+"${BUILD_SOURCE_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
     "${LOGO_CONFIG}" "${UBOOT_LOGO_CONFIG}"
-gmake -C "${UBOOT_SRC_DIR}" O="${BUILD_DIR}" \
+gmake -C "${BUILD_SOURCE_DIR}" O="${BUILD_DIR}" \
     CROSS_COMPILE="${CROSS_COMPILE}" olddefconfig
-gmake -C "${UBOOT_SRC_DIR}" O="${BUILD_DIR}" \
+gmake -C "${BUILD_SOURCE_DIR}" O="${BUILD_DIR}" \
     CROSS_COMPILE="${CROSS_COMPILE}" \
     BL31="${UBOOT_BL31}" ROCKCHIP_TPL="${UBOOT_ROCKCHIP_TPL}" \
     -j"${JOBS}"
@@ -130,10 +155,10 @@ done
 FREEBSD_DTS_PP=${WORK}/${BOARD}-freebsd.pp.dts
 "${CROSS_COMPILE}gcc" -E -nostdinc -undef -D__DTS__ \
     -x assembler-with-cpp \
-    -I"${UBOOT_SRC_DIR}/dts/upstream/src/arm64/rockchip" \
-    -I"${UBOOT_SRC_DIR}/dts/upstream/src/arm64" \
-    -I"${UBOOT_SRC_DIR}/dts/upstream/src" \
-    -I"${UBOOT_SRC_DIR}/dts/upstream/include" \
+    -I"${BUILD_SOURCE_DIR}/dts/upstream/src/arm64/rockchip" \
+    -I"${BUILD_SOURCE_DIR}/dts/upstream/src/arm64" \
+    -I"${BUILD_SOURCE_DIR}/dts/upstream/src" \
+    -I"${BUILD_SOURCE_DIR}/dts/upstream/include" \
     "${FREEBSD_DTS}" > "${FREEBSD_DTS_PP}"
 "${BUILD_DIR}/scripts/dtc/dtc" -@ -I dts -O dtb \
     -o "${OUT}/freebsd-runtime.dtb" "${FREEBSD_DTS_PP}"
@@ -248,6 +273,8 @@ Board: ${BOARD}
 U-Boot source: ${UBOOT_SRC_DIR}
 Source branch: ${SOURCE_BRANCH}
 Source commit: ${SOURCE_COMMIT}
+Source files: ${UBOOT_SOURCE_FILES_DIR:-none}
+Source patches: ${UBOOT_SOURCE_PATCH_DIR:-none}
 BL31: ${UBOOT_BL31}
 Rockchip TPL: ${UBOOT_ROCKCHIP_TPL}
 Cross compile: ${CROSS_COMPILE}

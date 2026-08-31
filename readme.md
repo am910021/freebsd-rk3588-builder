@@ -88,12 +88,14 @@ Shared defaults are in `builder.conf`. Board-specific settings are in:
 
 ```text
 boards/nanopc-t6-lts/board.conf
+boards/g98/board.conf
 ```
 
 All settings can be overridden with environment variables. Common settings:
 
 ```sh
 export BOARD=nanopc-t6-lts
+# or: export BOARD=g98
 FIRMWARE_MIB=16
 ESP_SIZE_MIB=256
 SWAP_SIZE_MIB=512
@@ -121,13 +123,17 @@ The NanoPC-T6 LTS board settings use `nanopc_t6` as the ZFS pool and
 `nanopc_t6/ROOT/default` as the bootfs. Override the pool name with
 `ZFS_POOL_NAME`.
 
-Each board specifies a FreeBSD DTS derived from the upstream U-Boot DTS:
+Each board uses the same outer layout: `board.conf`, `assets/`, `dts/`, and
+an optional `loader.conf`. Each board specifies a FreeBSD DTS derived from
+the upstream U-Boot DTS:
 
 ```sh
 FREEBSD_DTS=${BOARD_DIR}/dts/rk3588-nanopc-t6-lts-freebsd.dts
 ```
 
-The U-Boot control DTB is built from `nanopc-t6-rk3588_defconfig` in
+The U-Boot control DTB is built from the defconfig selected by `board.conf`.
+G98 keeps its not-yet-upstream board files under `boards/g98/u-boot/`; the
+build uses a temporary source clone to apply them without modifying
 `src/u-boot-2026.07`. The vendor 2017 runtime DTB is no longer embedded.
 
 Git sources can follow a branch or be pinned to a commit:
