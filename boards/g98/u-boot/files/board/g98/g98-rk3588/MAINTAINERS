@@ -1,0 +1,7 @@
+G98-RK3588
+S:	Maintained
+F:	board/g98/g98-rk3588/
+F:	include/configs/g98-rk3588.h
+F:	configs/g98-rk3588_defconfig
+F:	dts/upstream/src/arm64/rockchip/rk3588-g98*
+F:	arch/arm/dts/rk3588-g98-u-boot.dtsi

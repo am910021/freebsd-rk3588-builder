@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/dts-v1/;
+
+/* Linux v6.18.32 SoC base plus a locally maintained G98 board base. */
+#include "rk3588.dtsi"
+#include "rk3588-g98-base.dtsi"
+#include "rk3588-g98.dtsi"
+
+/ {
+	model = "G98 RK3588";
+	compatible = "g98,rk3588", "rockchip,rk3588";
+};

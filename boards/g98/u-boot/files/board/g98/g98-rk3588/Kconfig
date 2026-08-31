@@ -1,0 +1,12 @@
+if TARGET_G98_RK3588
+
+config SYS_BOARD
+	default "g98-rk3588"
+
+config SYS_VENDOR
+	default "g98"
+
+config SYS_CONFIG_NAME
+	default "g98-rk3588"
+
+endif
