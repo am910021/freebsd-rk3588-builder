@@ -32,6 +32,16 @@ config RK3588_FREEBSD_SHOW_LOGO
 	depends on RK3588_FREEBSD_BOOT
 	default y
 
+config RK3588_FREEBSD_SPI_UPDATE
+	bool "Accept SHA-256-verified one-shot SPI firmware updates"
+	depends on RK3588_FREEBSD_BOOT && CMD_SF
+	select SHA256
+	help
+	  Read a firmware-update.bin and its authenticated one-shot request
+	  from a filesystem scanned by the FreeBSD boot menu, update SPI NOR,
+	  verify the written image, and reset. Enable only on boards whose
+	  firmware layout reserves CONFIG_ENV_OFFSET as the update boundary.
+
 config TARGET_EVB_RK3588
 	bool "Rockchip EVB1 v10"
 	help
