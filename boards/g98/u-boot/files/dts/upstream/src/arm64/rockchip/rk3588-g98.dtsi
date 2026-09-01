@@ -329,7 +329,7 @@
 };
 
 &u2phy0_otg {
-	vbus-supply = <&vcc5v0_host>;
+	phy-supply = <&vcc5v0_otg>;
 	status = "okay";
 };
 
@@ -351,7 +351,7 @@
 };
 
 &usb_host0_xhci {
-	dr_mode = "otg";
+	dr_mode = "host";
 	status = "okay";
 };
 
