@@ -175,7 +175,7 @@ A complete image requires:
 output/14.3-p16/base.txz
 output/14.3-p16/kernel.txz
 output/14.3-p16/realtek-rge-kmod-20260728.pkg
-work/uboot-latest/
+output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 ```
 
 `base.txz` and `kernel.txz` come from the current FreeBSD arm64 release build.
@@ -214,7 +214,7 @@ FIRMWARE_MIB=32
 Output:
 
 ```text
-work/nanopc-t6-lts-uboot-2026.07-16m/
+output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 |-- idbloader.img
 |-- u-boot.itb
 |-- uboot-control.dtb
@@ -228,6 +228,7 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 `-- SHA256SUMS
 ```
 
+The same bundle remains under `work/nanopc-t6-lts-uboot-2026.07-16m/`, and
 `work/uboot-latest` points to the most recently completed bundle.
 
 U-Boot discovers `/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and

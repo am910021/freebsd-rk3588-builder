@@ -170,7 +170,7 @@ untracked 檔案與 ignored 檔案都會直接刪除且不備份。`BOARD` 只�
 output/14.3-p16/base.txz
 output/14.3-p16/kernel.txz
 output/14.3-p16/realtek-rge-kmod-20260728.pkg
-work/uboot-latest/
+output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 ```
 
 `base.txz` 與 `kernel.txz` 由目前的 FreeBSD arm64 release build 產生。
@@ -208,7 +208,7 @@ FIRMWARE_MIB=32
 輸出：
 
 ```text
-work/nanopc-t6-lts-uboot-2026.07-16m/
+output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 ├── idbloader.img
 ├── u-boot.itb
 ├── uboot-control.dtb
@@ -222,6 +222,7 @@ work/nanopc-t6-lts-uboot-2026.07-16m/
 └── SHA256SUMS
 ```
 
+同一份 bundle 仍會保留在 `work/nanopc-t6-lts-uboot-2026.07-16m/`，
 `work/uboot-latest` 會指向最新完成的 bundle。
 
 U-Boot 會依 eMMC、SD、USB、NVMe、SATA/SCSI 順序尋找

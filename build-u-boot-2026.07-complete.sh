@@ -86,6 +86,7 @@ fi
 mkdir -p "${WORK_ROOT}/tmp"
 AUTO_WORK=0
 STAGING_OUT=
+PUBLISH_STAGING=
 if [ -z "${WORK}" ]; then
 	WORK=$(mktemp -d "${WORK_ROOT}/tmp/${BOARD}-uboot.XXXXXX")
 	AUTO_WORK=1
@@ -99,6 +100,10 @@ cleanup()
 	if [ -n "${STAGING_OUT}" ] && [ -e "${STAGING_OUT}" ]; then
 		mv "${STAGING_OUT}" \
 		    "${HOME}/ready-to-delete/${STAGING_OUT##*/}-$(date +%Y%m%d-%H%M%S)-$$"
+	fi
+	if [ -n "${PUBLISH_STAGING}" ] && [ -e "${PUBLISH_STAGING}" ]; then
+		mv "${PUBLISH_STAGING}" \
+		    "${HOME}/ready-to-delete/${PUBLISH_STAGING##*/}-$(date +%Y%m%d-%H%M%S)-$$"
 	fi
 	if [ "${AUTO_WORK}" = "1" ] && [ -e "${WORK}" ]; then
 		mv "${WORK}" \
@@ -309,9 +314,21 @@ STAGING_OUT=
 OUT=${FINAL_OUT}
 
 ln -sfn "${OUT}" "${WORK_ROOT}/uboot-latest"
+mkdir -p "${VERSION_OUTPUT_ROOT}"
+PUBLISH_OUT=${VERSION_OUTPUT_ROOT}/${FINAL_OUT##*/}
+PUBLISH_STAGING=$(mktemp -d "${VERSION_OUTPUT_ROOT}/.${FINAL_OUT##*/}.XXXXXX")
+(cd "${OUT}" && tar -cpf - .) | (cd "${PUBLISH_STAGING}" && tar -xpf -)
+if [ -e "${PUBLISH_OUT}" ]; then
+	mkdir -p "${HOME}/ready-to-delete"
+	mv "${PUBLISH_OUT}" \
+	    "${HOME}/ready-to-delete/output-${PUBLISH_OUT##*/}-$(date +%Y%m%d-%H%M%S)-$$"
+fi
+mv "${PUBLISH_STAGING}" "${PUBLISH_OUT}"
+PUBLISH_STAGING=
 echo "== ${BOARD} U-Boot ${UBOOT_VERSION} complete bundle =="
 ls -lh "${OUT}/idbloader.img" "${OUT}/u-boot.itb" \
     "${OUT}/logo.img" \
     "${OUT}/firmware-update.bin" \
     "${OUT}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin"
 echo "${OUT}"
+echo "${PUBLISH_OUT}"
