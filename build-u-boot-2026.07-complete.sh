@@ -162,6 +162,7 @@ FREEBSD_DTS_PP=${WORK}/${BOARD}-freebsd.pp.dts
     -I"${BUILD_SOURCE_DIR}/dts/upstream/include" \
     "${FREEBSD_DTS}" > "${FREEBSD_DTS_PP}"
 "${BUILD_DIR}/scripts/dtc/dtc" -@ -I dts -O dtb \
+	-Wno-unique_unit_address -Wunique_unit_address_if_enabled \
     -o "${OUT}/freebsd-runtime.dtb" "${FREEBSD_DTS_PP}"
 
 cp -p "${BUILD_DIR}/idbloader.img" "${OUT}/idbloader.img"
