@@ -171,6 +171,10 @@
 	status = "okay";
 };
 
+&combphy1_ps {
+	status = "okay";
+};
+
 &combphy2_psu {
 	status = "okay";
 };
