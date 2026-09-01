@@ -24,6 +24,13 @@ case "${FIRMWARE_MIB}" in
 		exit 1
 		;;
 esac
+case "${UBOOT_FIRMWARE_LAYOUT}" in
+	mmc|spi) ;;
+	*)
+		echo "${0##*/}: U-Boot firmware layout must be mmc or spi" >&2
+		exit 1
+		;;
+esac
 
 FINAL_OUT=${WORK_ROOT}/${BOARD}-uboot-${UBOOT_VERSION}-${FIRMWARE_MIB}m
 WORK=${WORK:-}
@@ -157,6 +164,9 @@ for file in idbloader.img u-boot.itb u-boot.bin u-boot.dtb .config; do
 	[ -f "${BUILD_DIR}/${file}" ] ||
 	    fail "build did not produce: ${file}"
 done
+[ "${UBOOT_FIRMWARE_LAYOUT}" != "spi" ] ||
+    [ -f "${BUILD_DIR}/u-boot-rockchip-spi.bin" ] ||
+    fail "build did not produce: u-boot-rockchip-spi.bin"
 
 FREEBSD_DTS_PP=${WORK}/${BOARD}-freebsd.pp.dts
 "${CROSS_COMPILE}gcc" -E -nostdinc -undef -D__DTS__ \
@@ -176,9 +186,14 @@ cp -p "${BUILD_DIR}/u-boot.bin" "${OUT}/u-boot.bin"
 cp -p "${BUILD_DIR}/u-boot.dtb" "${OUT}/uboot-control.dtb"
 cp -p "${BUILD_DIR}/.config" "${OUT}/u-boot.config"
 cp -p "${LOGO_BMP}" "${OUT}/logo.bmp"
+SPI_FIRMWARE_FILE=
+if [ "${UBOOT_FIRMWARE_LAYOUT}" = "spi" ]; then
+	SPI_FIRMWARE_FILE=u-boot-rockchip-spi.bin
+	cp -p "${BUILD_DIR}/${SPI_FIRMWARE_FILE}" "${OUT}/${SPI_FIRMWARE_FILE}"
+fi
 
 python3 - "${OUT}" "${FIRMWARE_MIB}" "${UBOOT_LOGO_ENABLE}" \
-    "${BOARD}" "${UBOOT_BINARY_MARKER}" <<'PY'
+    "${BOARD}" "${UBOOT_BINARY_MARKER}" "${UBOOT_FIRMWARE_LAYOUT}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -187,6 +202,7 @@ size_mib = int(sys.argv[2])
 logo_enable = b"1" if sys.argv[3] == "YES" else b"0"
 board = sys.argv[4]
 binary_marker = sys.argv[5].encode()
+firmware_layout = sys.argv[6]
 mib = 1024 * 1024
 sector = 512
 idb_offset = 0x40 * sector
@@ -239,11 +255,33 @@ for setting in (
 
 idb = (out / "idbloader.img").read_bytes()
 uboot = (out / "u-boot.itb").read_bytes()
-limits = (
-    ("idbloader.img", idb_offset, idb, 8 * mib),
-    ("u-boot.itb", uboot_offset, uboot, logo_offset),
-    ("logo.img", logo_offset, logo_raw, env_offset),
-)
+if firmware_layout == "spi":
+    spi = (out / "u-boot-rockchip-spi.bin").read_bytes()
+    spi_uboot_offset = int(next(
+        line.split("=", 1)[1] for line in config.splitlines()
+        if line.startswith("CONFIG_SYS_SPI_U_BOOT_OFFS=")
+    ), 0)
+    if spi[spi_uboot_offset:spi_uboot_offset + 4] != b"\xd0\x0d\xfe\xed":
+        raise SystemExit("SPI image lacks FIT at CONFIG_SYS_SPI_U_BOOT_OFFS")
+    limits = (
+        ("u-boot-rockchip-spi.bin", 0, spi, logo_offset),
+        ("logo.img", logo_offset, logo_raw, env_offset),
+    )
+    boot_layout = (
+        f"u-boot-rockchip-spi.bin: offset 0x0, {len(spi)} bytes, "
+        "limit 12 MiB\n"
+        f"SPL payload: 0x{spi_uboot_offset:x}\n"
+    )
+else:
+    limits = (
+        ("idbloader.img", idb_offset, idb, uboot_offset),
+        ("u-boot.itb", uboot_offset, uboot, logo_offset),
+        ("logo.img", logo_offset, logo_raw, env_offset),
+    )
+    boot_layout = (
+        f"idbloader.img: LBA 0x40, {len(idb)} bytes, limit 8 MiB\n"
+        f"u-boot.itb: LBA 0x4000, {len(uboot)} bytes, limit 12 MiB\n"
+    )
 for name, offset, data, limit in limits:
     if offset + len(data) > limit:
         raise SystemExit(
@@ -262,8 +300,8 @@ firmware_name = f"{board}-uboot-{size_mib}m.bin"
 (out / "FIRMWARE-LAYOUT.txt").write_text(
     f"Firmware size: {size_mib} MiB\n"
     "Fill byte: 0xff\n"
-    f"idbloader.img: LBA 0x40, {len(idb)} bytes, limit 8 MiB\n"
-    f"u-boot.itb: LBA 0x4000, {len(uboot)} bytes, limit 12 MiB\n"
+    f"Firmware layout: {firmware_layout}\n"
+    f"{boot_layout}"
     f"logo.img: LBA 0x6000, {len(logo_raw)} bytes, "
     f"limit {env_offset} bytes\n"
     f"environment primary: 0x{env_offset:x}, {env_size} bytes\n"
@@ -292,6 +330,7 @@ FreeBSD DTS: ${FREEBSD_DTS}
 Firmware image: ${BOARD}-uboot-${FIRMWARE_MIB}m.bin
 Firmware update image: firmware-update.bin
 Firmware size: ${FIRMWARE_MIB} MiB
+Firmware layout: ${UBOOT_FIRMWARE_LAYOUT}
 EOF
 
 (
@@ -301,6 +340,7 @@ EOF
 	    logo.bmp logo.img \
 	    "${BOARD}-uboot-${FIRMWARE_MIB}m.bin" \
 	    firmware-update.bin \
+	    ${SPI_FIRMWARE_FILE} \
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt > SHA256SUMS
 )
 
@@ -330,5 +370,6 @@ ls -lh "${OUT}/idbloader.img" "${OUT}/u-boot.itb" \
     "${OUT}/logo.img" \
     "${OUT}/firmware-update.bin" \
     "${OUT}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin"
+[ -z "${SPI_FIRMWARE_FILE}" ] || ls -lh "${OUT}/${SPI_FIRMWARE_FILE}"
 echo "${OUT}"
 echo "${PUBLISH_OUT}"

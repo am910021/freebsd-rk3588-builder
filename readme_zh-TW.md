@@ -225,6 +225,10 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 同一份 bundle 仍會保留在 `work/nanopc-t6-lts-uboot-2026.07-16m/`，
 `work/uboot-latest` 會指向最新完成的 bundle。
 
+`UBOOT_FIRMWARE_LAYOUT` 依板型設定。MMC 板使用標準 raw MMC layout；G98
+使用 U-Boot 原生的 `u-boot-rockchip-spi.bin`，SPL payload offset 直接依其
+U-Boot 設定產生。
+
 U-Boot 會依 eMMC、SD、USB、NVMe、SATA/SCSI 順序尋找
 `/EFI/FreeBSD/loader.efi` 並動態產生選單。持久選單設定保存在 U-Boot
 redundant raw environment。

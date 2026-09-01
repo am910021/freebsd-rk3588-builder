@@ -231,6 +231,10 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 The same bundle remains under `work/nanopc-t6-lts-uboot-2026.07-16m/`, and
 `work/uboot-latest` points to the most recently completed bundle.
 
+`UBOOT_FIRMWARE_LAYOUT` is board-specific. MMC boards use the standard raw MMC
+layout; G98 uses U-Boot's native `u-boot-rockchip-spi.bin`, whose SPL payload
+offset is taken from its U-Boot configuration.
+
 U-Boot discovers `/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and
 SATA/SCSI, in that order, and builds the menu dynamically. Persistent menu
 settings are kept in U-Boot's redundant raw environment.
