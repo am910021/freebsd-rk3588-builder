@@ -61,9 +61,6 @@ done
 [ -z "${UBOOT_SOURCE_FILES_DIR}" ] ||
     [ -d "${UBOOT_SOURCE_FILES_DIR}" ] ||
     fail "missing U-Boot source files: ${UBOOT_SOURCE_FILES_DIR}"
-[ -z "${UBOOT_SOURCE_PATCH_DIR}" ] ||
-    [ -d "${UBOOT_SOURCE_PATCH_DIR}" ] ||
-    fail "missing U-Boot source patches: ${UBOOT_SOURCE_PATCH_DIR}"
 for cmd in git gmake bison mktemp python3 sha256 swig tar; do
 	command -v "${cmd}" >/dev/null 2>&1 || fail "missing command: ${cmd}"
 done
@@ -117,22 +114,14 @@ BUILD_DIR=${WORK}/build
 BUILD_SOURCE_DIR=${UBOOT_SRC_DIR}
 BUILD_SOURCE_COMMIT=${SOURCE_COMMIT}
 
-if [ -n "${UBOOT_SOURCE_FILES_DIR}${UBOOT_SOURCE_PATCH_DIR}" ]; then
+if [ -n "${UBOOT_SOURCE_FILES_DIR}" ]; then
 	BUILD_SOURCE_DIR=${WORK}/source
 	git clone --quiet --shared --no-checkout "${UBOOT_SRC_DIR}" \
 	    "${BUILD_SOURCE_DIR}"
 	git -C "${BUILD_SOURCE_DIR}" checkout --quiet --detach \
 	    "${SOURCE_COMMIT}"
-	if [ -n "${UBOOT_SOURCE_PATCH_DIR}" ]; then
-		for patch in "${UBOOT_SOURCE_PATCH_DIR}"/*.patch; do
-			[ -f "${patch}" ] || continue
-			git -C "${BUILD_SOURCE_DIR}" apply "${patch}"
-		done
-	fi
-	if [ -n "${UBOOT_SOURCE_FILES_DIR}" ]; then
-		(cd "${UBOOT_SOURCE_FILES_DIR}" && tar -cpf - .) |
-		    (cd "${BUILD_SOURCE_DIR}" && tar -xpf -)
-	fi
+	(cd "${UBOOT_SOURCE_FILES_DIR}" && tar -cpf - .) |
+	    (cd "${BUILD_SOURCE_DIR}" && tar -xpf -)
 	if [ -n "$(git -C "${BUILD_SOURCE_DIR}" status --porcelain)" ]; then
 		SOURCE_COMMIT_DATE=$(git -C "${UBOOT_SRC_DIR}" show -s \
 		    --format=%cI "${SOURCE_COMMIT}")
@@ -287,7 +276,6 @@ Source branch: ${SOURCE_BRANCH}
 Source commit: ${SOURCE_COMMIT}
 Build source commit: ${BUILD_SOURCE_COMMIT}
 Source files: ${UBOOT_SOURCE_FILES_DIR:-none}
-Source patches: ${UBOOT_SOURCE_PATCH_DIR:-none}
 BL31: ${UBOOT_BL31}
 Rockchip TPL: ${UBOOT_ROCKCHIP_TPL}
 Cross compile: ${CROSS_COMPILE}
