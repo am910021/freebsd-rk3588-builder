@@ -49,6 +49,7 @@ fi
 OUT=${OUT:-${IMAGE_OUTPUT_DIR}/${BOARD}-freebsd${FREEBSD_OBJ_VERSION}${ROOTFS_SUFFIX}-uboot${UBOOT_VERSION}-${FIRMWARE_MIB}m-${STAMP}.img}
 WORK=${WORK:-}
 rge_pkg=
+yt921x_pkg=
 
 usage()
 {
@@ -200,6 +201,19 @@ done
 [ -n "${uboot_config_pkg}" ] ||
     die "no rk3588-uboot-config package found in ${TXZ_ROOT}"
 
+case " ${PORT_ORIGINS} " in
+*" net/motorcomm-yt921x-kmod "*)
+	for candidate in "${TXZ_ROOT}"/motorcomm-yt921x-kmod-*.pkg; do
+		[ -f "${candidate}" ] || continue
+		[ -z "${yt921x_pkg}" ] ||
+		    die "multiple motorcomm-yt921x-kmod packages in ${TXZ_ROOT}"
+		yt921x_pkg=${candidate}
+	done
+	[ -n "${yt921x_pkg}" ] ||
+	    die "no motorcomm-yt921x-kmod package found in ${TXZ_ROOT}"
+	;;
+esac
+
 cleanup()
 {
 	if [ -n "${esp_mnt}" ]; then
@@ -226,6 +240,8 @@ for file in "${pkg_package}" "${rge_pkg}" "${rtlbt_pkg}" \
     "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
+[ -z "${yt921x_pkg}" ] || [ -f "${yt921x_pkg}" ] ||
+    die "missing input: ${yt921x_pkg}"
 if [ "${INSTALLER}" = "YES" ]; then
 	[ -f "${MANIFEST_SCRIPT}" ] ||
 	    die "missing installer input: ${MANIFEST_SCRIPT}"
@@ -305,6 +321,10 @@ ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
     die "pkg package did not install /usr/local/sbin/pkg"
 ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
     add "${rge_pkg}"
+if [ -n "${yt921x_pkg}" ]; then
+	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
+	    add "${yt921x_pkg}"
+fi
 ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
     add "${rtlbt_pkg}"
 ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
@@ -319,6 +339,9 @@ if [ -d "${BOARD_FILES_DIR}" ]; then
 fi
 [ -f "${root_mnt}/boot/modules/if_rge.ko" ] ||
     die "if_rge package did not install /boot/modules/if_rge.ko"
+[ -z "${yt921x_pkg}" ] ||
+    [ -f "${root_mnt}/boot/modules/yt921x.ko" ] ||
+    die "motorcomm-yt921x-kmod did not install /boot/modules/yt921x.ko"
 
 mkdir -p "${root_mnt}/boot/efi" "${root_mnt}/tmp" \
     "${root_mnt}/var/log" "${root_mnt}/var/tmp"
@@ -338,6 +361,9 @@ if [ "${INSTALLER}" = "YES" ]; then
 	cp -p "${UBOOT_UPDATE_BIN}" "${payload}/firmware-update.bin"
 	cp -p "${pkg_package}" "${payload}/pkg.pkg"
 	cp -p "${rge_pkg}" "${payload}/if_rge.pkg"
+	if [ -n "${yt921x_pkg}" ]; then
+		cp -p "${yt921x_pkg}" "${payload}/yt921x.pkg"
+	fi
 	cp -p "${rtlbt_pkg}" "${payload}/rtlbt-firmware.pkg"
 	cp -p "${uboot_config_pkg}" "${payload}/uboot-config.pkg"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
@@ -432,6 +458,10 @@ base_sha=$(sha256 -q "${BASE_TXZ}")
 kernel_sha=$(sha256 -q "${KERNEL_TXZ}")
 pkg_sha=$(sha256 -q "${pkg_package}")
 rge_sha=$(sha256 -q "${rge_pkg}")
+yt921x_sha=
+if [ -n "${yt921x_pkg}" ]; then
+	yt921x_sha=$(sha256 -q "${yt921x_pkg}")
+fi
 uboot_config_sha=$(sha256 -q "${uboot_config_pkg}")
 firmware_sha=$(sha256 -q "${UBOOT_BIN}")
 firmware_update_sha=$(sha256 -q "${UBOOT_UPDATE_BIN}")
@@ -462,6 +492,10 @@ Root filesystem: ${ROOTFS_TYPE}
 Installed ports: ${PORT_ORIGINS}
 Installer payload: ${INSTALLER}
 EOF
+if [ -n "${yt921x_pkg}" ]; then
+	echo "motorcomm-yt921x-kmod.pkg: ${yt921x_sha}" \
+	    >> "${root_mnt}/etc/${BOARD}-image-build.txt"
+fi
 if [ -n "${swap_uuid}" ]; then
 	echo "Swap partition GUID: ${swap_uuid}" \
 	    >> "${root_mnt}/etc/${BOARD}-image-build.txt"
@@ -574,6 +608,14 @@ if_rge.pkg: ${rge_pkg}
 if_rge.pkg SHA256: ${rge_sha}
 rk3588-uboot-config.pkg: ${uboot_config_pkg}
 rk3588-uboot-config.pkg SHA256: ${uboot_config_sha}
+EOF
+if [ -n "${yt921x_pkg}" ]; then
+	cat >> "${OUT}.build-info.txt" <<EOF
+motorcomm-yt921x-kmod.pkg: ${yt921x_pkg}
+motorcomm-yt921x-kmod.pkg SHA256: ${yt921x_sha}
+EOF
+fi
+cat >> "${OUT}.build-info.txt" <<EOF
 Layout:
   p1 firmware:   0-${FIRMWARE_MIB} MiB
   p2 ESP:        ${FIRMWARE_MIB}-${ESP_END_MIB} MiB
