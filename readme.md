@@ -188,7 +188,7 @@ FREEBSD_SRC_DIR=${BUILDER_ROOT}/src/freebsd-src
 FREEBSD_OBJ_VERSION=14.3-p16  # Derived automatically from sys/conf/newvers.sh
 FREEBSD_OBJ_ROOT=${BUILDER_ROOT}/work/obj/${FREEBSD_OBJ_VERSION}
 FREEBSD_OBJ=${FREEBSD_OBJ_ROOT}/arm64.aarch64
-KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
+KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-NORE
 ```
 
 `build-ports.sh` builds every origin in `PORT_ORIGINS` with the same FreeBSD
@@ -333,7 +333,7 @@ The script uses:
 
 - `src/freebsd-src`
 - `work/obj/<FreeBSD version>/arm64.aarch64`
-- `FREEBSD_KERNCONF` from `boards/nanopc-t6-lts/board.conf`
+- `FREEBSD_KERNCONF` from the selected board's `board.conf`
 
 Output:
 

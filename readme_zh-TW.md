@@ -183,7 +183,7 @@ FREEBSD_SRC_DIR=${BUILDER_ROOT}/src/freebsd-src
 FREEBSD_OBJ_VERSION=14.3-p16  # 從 sys/conf/newvers.sh 自動取得
 FREEBSD_OBJ_ROOT=${BUILDER_ROOT}/work/obj/${FREEBSD_OBJ_VERSION}
 FREEBSD_OBJ=${FREEBSD_OBJ_ROOT}/arm64.aarch64
-KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-T6-NORE
+KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-NORE
 ```
 
 `build-ports.sh` 會用同一套 FreeBSD object tree 與 arm64 toolchain
@@ -324,7 +324,7 @@ NO_CLEAN=YES ./build-freebsd-release.sh
 
 - `src/freebsd-src`
 - `work/obj/<FreeBSD 版本>/arm64.aarch64`
-- `boards/nanopc-t6-lts/board.conf` 的 `FREEBSD_KERNCONF`
+- 所選板卡 `board.conf` 中的 `FREEBSD_KERNCONF`
 
 輸出：
 
