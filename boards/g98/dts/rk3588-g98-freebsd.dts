@@ -14,3 +14,11 @@
 	model = "G98 RK3588";
 	compatible = "g98,rk3588", "rockchip,rk3588";
 };
+
+&gmac0 {
+	max-frame-size = <9000>;
+};
+
+&gmac1 {
+	max-frame-size = <9000>;
+};
