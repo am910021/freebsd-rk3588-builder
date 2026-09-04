@@ -133,7 +133,6 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&vcc5v0_otg_en>;
 		regulator-name = "vcc5v0_otg";
-		regulator-boot-on;
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		vin-supply = <&vcc5v0_usb>;
