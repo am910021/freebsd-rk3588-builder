@@ -61,7 +61,7 @@ checkout.sh -> build-u-boot-2026.07-complete.sh -> build-freebsd-release.sh -> b
 
 ```text
 freebsd-rk3588-builder/
-|-- boards/                         Board-specific settings, DTS, menu, and file overlays
+|-- boards/                         Board-specific settings, DTS, menu, Port patches, and file overlays
 |-- output/                         Deliverable artifacts
 |   `-- 14.3-p16/                   Images, txz archives, and checksums
 |-- src/
@@ -195,6 +195,12 @@ KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-NORE
 object tree and arm64 toolchain. Image assembly consumes only the resulting
 packages, installs those packages into the image, and never builds ports
 itself.
+
+Before a Port is built, board-only patches matching
+`boards/<board>/ports/<category>/<port>/files/patch-*` are passed to the
+standard Ports `EXTRA_PATCHES` mechanism.  G98 uses this for its PCB-specific
+RTL8125B and YT9215S LED profiles; the shared driver repositories remain
+board-neutral.
 
 ## Step 2: Build U-Boot
 
@@ -366,6 +372,10 @@ output/<FreeBSD version>/rtlbt-firmware-<version>.pkg.sha256
 `build-ports.sh` builds the local `pkg`, driver, and installer ports, then
 fetches the architecture-neutral `rtlbt-firmware` package from the configured
 official FreeBSD pkg repository.
+
+For `BOARD=g98`, it also applies the G98-only patches under `boards/g98/ports/`
+while building the affected driver packages.  Other boards do not see these
+patches.
 
 ## Step 5: Build the FreeBSD Image
 

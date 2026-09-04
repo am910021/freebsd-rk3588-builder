@@ -60,7 +60,7 @@ checkout.sh -> build-u-boot-2026.07-complete.sh -> build-freebsd-release.sh -> b
 
 ```text
 freebsd-rk3588-builder/
-├── boards/                         board 專屬設定、DTS、menu 與檔案覆蓋
+├── boards/                         board 專屬設定、DTS、menu、Port patch 與檔案覆蓋
 ├── output/                         可交付產物
 │   └── 14.3-p16/                   image、txz 與 checksum
 ├── src/
@@ -189,6 +189,11 @@ KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-NORE
 `build-ports.sh` 會用同一套 FreeBSD object tree 與 arm64 toolchain
 建置 `PORT_ORIGINS` 內的所有 origin。image 組裝會安裝清單內建好的
 package，不會在組裝期間編譯 port。
+
+每個 Port 建置前，符合
+`boards/<board>/ports/<category>/<port>/files/patch-*` 的板級 patch 會透過
+標準 Ports `EXTRA_PATCHES` 機制套用。G98 使用這個機制保存 PCB 專屬的
+RTL8125B 與 YT9215S LED profile，共用驅動 repository 不包含板級設定。
 
 ## 步驟 2：建立 U-Boot
 
@@ -357,6 +362,9 @@ output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg.sha256
 `build-ports.sh` 會建立本地 `pkg`、driver 與 installer ports，並從已設定的
 FreeBSD 官方 pkg repository 擷取架構無關的 `rtlbt-firmware`
 package。
+
+使用 `BOARD=g98` 時，建置受影響的驅動套件也會套用
+`boards/g98/ports/` 內的 G98 專用 patch；其他 board 不會套用。
 
 ## 步驟 5：建立 FreeBSD image
 

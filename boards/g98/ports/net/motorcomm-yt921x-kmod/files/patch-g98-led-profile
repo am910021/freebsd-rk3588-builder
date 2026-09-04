@@ -1,0 +1,54 @@
+--- if_yt921x.c.orig
++++ if_yt921x.c
+@@ -66,6 +66,10 @@
+ #define YT921X_PORT_IGR_TPID(port)	(0x210010 + 4 * (port))
+ #define YT921X_PORT_VLAN_CTRL(port)	(0x230010 + 4 * (port))
+ #define YT921X_PORT_VLAN_CTRL1(port)	(0x230080 + 4 * (port))
++#define YT921X_LED_CTRL0(port)	(0xd0004 + 4 * (port))
++#define YT921X_LED_CTRL1(port)	(0xd0040 + 4 * (port))
++#define YT921X_LED_G98_LINK	0x00020070
++#define YT921X_LED_G98_ACTIVITY	0x40002670	/* 4 Hz */
+ 
+ #define YT921X_SERDES_CTRL_PORT9	(1U << 1)
+ #define YT921X_XMII_CTRL_PORT9	(1U << 0)
+@@ -569,6 +573,27 @@
+ 	    YT921X_POLLING9_LINK_1G));
+ }
+ 
++static int
++yt921x_configure_leds(struct yt921x_softc *sc, phandle_t node)
++{
++	u_int hwport;
++	int error;
++
++	if (!OF_hasprop(node, "motorcomm,bdy-g98-led-profile"))
++		return (0);
++	for (u_int port = 0; port < YT921X_CPU_PORT; port++) {
++		hwport = yt921x_hwport(port);
++		error = yt921x_write(sc, YT921X_LED_CTRL0(hwport),
++		    YT921X_LED_G98_LINK);
++		if (error == 0)
++			error = yt921x_write(sc, YT921X_LED_CTRL1(hwport),
++			    YT921X_LED_G98_ACTIVITY);
++		if (error != 0)
++			return (error);
++	}
++	return (0);
++}
++
+ static int
+ yt921x_log_port9(struct yt921x_softc *sc)
+ {
+@@ -1138,6 +1163,12 @@
+ 		mtx_destroy(&sc->mtx);
+ 		return (error);
+ 	}
++	error = yt921x_configure_leds(sc, node);
++	if (error != 0) {
++		device_printf(dev, "cannot configure LED profile: %d\n", error);
++		mtx_destroy(&sc->mtx);
++		return (error);
++	}
+ 	error = yt921x_update(sc, YT921X_FUNC, YT921X_FUNC_MIB,
+ 	    YT921X_FUNC_MIB);
+ 	if (error != 0) {

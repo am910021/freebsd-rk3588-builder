@@ -1,0 +1,94 @@
+--- Makefile.orig
++++ Makefile
+@@ -2,6 +2,6 @@
+ 
+ KMOD=	if_rge
+ SRCS=	if_rge.c if_rge_sysctl.c if_rge_stats.c if_rge_hw.c
+-SRCS+=	device_if.h bus_if.h pci_if.h opt_inet.h opt_inet6.h
++SRCS+=	device_if.h bus_if.h pci_if.h opt_inet.h opt_inet6.h opt_platform.h
+ 
+ .include <bsd.kmod.mk>
+--- if_rge.c.orig
++++ if_rge.c
+@@ -23,6 +23,7 @@
+ 
+ #include "opt_inet.h"
+ #include "opt_inet6.h"
++#include "opt_platform.h"
+ 
+ #include <sys/param.h>
+ #include <sys/systm.h>
+@@ -64,6 +65,11 @@
+ #include <dev/pci/pcivar.h>
+ #include <dev/pci/pcireg.h>
+ 
++#ifdef FDT
++#include <dev/ofw/openfirm.h>
++#include <dev/ofw/ofw_bus_subr.h>
++#endif
++
+ #include "if_rge_vendor.h"
+ #include "if_rgereg.h"
+ #include "if_rgevar.h"
+@@ -82,6 +88,12 @@
+ 					 RGE_CSUM_FEATURES_IPV6)
+ #define	RGE_RX_BUF_SIZE			MJUM9BYTES
+ 
++#define	RGE_LEDSEL0			0x0018
++#define	RGE_LEDSEL2			0x0084
++#define	RGE_LEDSEL1			0x0086
++#define	RGE_LEDSEL3			0x0096
++#define	RGE_G98_LEDSEL			0x022b
++
+ static int		rge_attach(device_t);
+ static int		rge_detach(device_t);
+ 
+@@ -114,6 +126,40 @@
+ static void	rge_tick(void *);
+ static void	rge_link_state(struct rge_softc *);
+ static void	rge_setwol(struct rge_softc *);
++static void	rge_apply_g98_led_profile(struct rge_softc *);
++
++static void
++rge_apply_g98_led_profile(struct rge_softc *sc)
++{
++#ifdef FDT
++	static const bus_size_t ledregs[] = {
++		RGE_LEDSEL0, RGE_LEDSEL1, RGE_LEDSEL2, RGE_LEDSEL3
++	};
++	phandle_t root;
++	int i;
++
++	root = OF_finddevice("/");
++	if (root <= 0 ||
++	    !ofw_bus_node_is_compatible(root, "g98,rk3588") ||
++	    pci_get_device(sc->sc_dev) != PCI_PRODUCT_REALTEK_RTL8125B ||
++	    pci_get_subvendor(sc->sc_dev) != 0x1043 ||
++	    pci_get_subdevice(sc->sc_dev) != 0x208f)
++		return;
++
++	RGE_WRITE_1(sc, RGE_EECMD, RGE_EECMD_WRITECFG);
++	DELAY(50000);
++	RGE_WRITE_1(sc, RGE_CFG1, 0xcf);
++	for (i = 0; i < nitems(ledregs); i++)
++		RGE_WRITE_2(sc, ledregs[i], RGE_G98_LEDSEL);
++	DELAY(100000);
++	device_printf(sc->sc_dev,
++	    "G98 LED profile cfg1=%#02x led=%#04x/%#04x/%#04x/%#04x\n",
++	    RGE_READ_1(sc, RGE_CFG1), RGE_READ_2(sc, RGE_LEDSEL0),
++	    RGE_READ_2(sc, RGE_LEDSEL1), RGE_READ_2(sc, RGE_LEDSEL2),
++	    RGE_READ_2(sc, RGE_LEDSEL3));
++	RGE_WRITE_1(sc, RGE_EECMD, 0x11);
++#endif
++}
+ 
+ struct rge_matchid {
+ 	uint16_t vendor;
+@@ -1579,6 +1625,7 @@
+ 
+ 	rge_disable_aspm_clkreq(sc);
+ 
++	rge_apply_g98_led_profile(sc);
+ 	RGE_CLRBIT_1(sc, RGE_EECMD, RGE_EECMD_WRITECFG);
+ 	DELAY(10);
+ 

@@ -53,6 +53,11 @@ for origin in ${PORT_ORIGINS}; do
 	[ -f "${port_dir}/Makefile" ] || die "missing port: ${origin}"
 	slug=$(printf '%s\n' "${origin}" | tr / _)
 	port_work=${ports_work}/${slug}
+	board_patches=
+	for patch in "${BOARD_DIR}/ports/${origin}/files"/patch-*; do
+		[ -f "${patch}" ] || continue
+		board_patches="${board_patches} ${patch}"
+	done
 
 	echo "== Building ${origin} =="
 	env MAKEOBJDIRPREFIX="${FREEBSD_OBJ_ROOT}" \
@@ -66,6 +71,7 @@ for origin in ${PORT_ORIGINS}; do
 	    CPP="cpp --target=${cross_target} --sysroot=${target_sysroot}" \
 	    SRC_BASE="${FREEBSD_SRC_DIR}" \
 	    KERNBUILDDIR="${KERNBUILDDIR}" \
+	    EXTRA_PATCHES="${board_patches# }" \
 	    WRKDIR="${port_work}" \
 	    PKG_BIN="${host_pkg}" \
 	    "PKG_ENV+=ABI_FILE=${FREEBSD_OBJ}/bin/sh/sh" \
