@@ -222,6 +222,7 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 ├── logo.img
 ├── nanopc-t6-lts-uboot-16m.bin
 ├── firmware-update.bin
+├── uboot-spi-update.request
 ├── FIRMWARE-LAYOUT.txt
 ├── BUILD-INFO.txt
 └── SHA256SUMS
@@ -304,6 +305,11 @@ primary 與 redundant environment 各為 64 KiB，位置分別是 `0xf80000`
 與 `0xf90000`。`firmware-update.bin` 結束於 `0xf80000`，更新 firmware
 時不會覆蓋任一份環境；完整 board firmware image 只供建立全新 image
 或外部完整燒錄使用。
+
+`uboot-spi-update.request` 會記錄配對映像的大小與 SHA-256。Builder 只把
+兩個更新檔留在輸出 bundle，不會自動將 request 複製到 EFI System
+Partition；只有準備讓 SPI 更新在下次開機執行時，才將兩個檔案一起
+複製到 ESP。
 
 目前 R81 包含 raw logo、HDMI/vidconsole、FreeBSD EFI 啟動，以及
 3 秒內建 U-Boot menu：

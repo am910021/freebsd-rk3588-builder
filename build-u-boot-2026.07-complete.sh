@@ -195,6 +195,7 @@ fi
 python3 - "${OUT}" "${FIRMWARE_MIB}" "${UBOOT_LOGO_ENABLE}" \
     "${BOARD}" "${UBOOT_BINARY_MARKER}" "${UBOOT_FIRMWARE_LAYOUT}" <<'PY'
 from pathlib import Path
+import hashlib
 import sys
 
 out = Path(sys.argv[1])
@@ -295,7 +296,13 @@ for _, offset, data, _ in limits:
 
 firmware_name = f"{board}-uboot-{size_mib}m.bin"
 (out / firmware_name).write_bytes(firmware)
-(out / "firmware-update.bin").write_bytes(firmware[:env_offset])
+firmware_update = bytes(firmware[:env_offset])
+(out / "firmware-update.bin").write_bytes(firmware_update)
+(out / "uboot-spi-update.request").write_text(
+    "version=1\n"
+    f"size={len(firmware_update)}\n"
+    f"sha256={hashlib.sha256(firmware_update).hexdigest()}\n"
+)
 (out / "logo.img").write_bytes(logo_raw)
 (out / "FIRMWARE-LAYOUT.txt").write_text(
     f"Firmware size: {size_mib} MiB\n"
@@ -329,6 +336,7 @@ Logo enabled: ${UBOOT_LOGO_ENABLE}
 FreeBSD DTS: ${FREEBSD_DTS}
 Firmware image: ${BOARD}-uboot-${FIRMWARE_MIB}m.bin
 Firmware update image: firmware-update.bin
+Firmware update request: uboot-spi-update.request
 Firmware size: ${FIRMWARE_MIB} MiB
 Firmware layout: ${UBOOT_FIRMWARE_LAYOUT}
 EOF
@@ -339,7 +347,7 @@ EOF
 	    uboot-control.dtb freebsd-runtime.dtb \
 	    logo.bmp logo.img \
 	    "${BOARD}-uboot-${FIRMWARE_MIB}m.bin" \
-	    firmware-update.bin \
+	    firmware-update.bin uboot-spi-update.request \
 	    ${SPI_FIRMWARE_FILE} \
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt > SHA256SUMS
 )
@@ -369,6 +377,7 @@ echo "== ${BOARD} U-Boot ${UBOOT_VERSION} complete bundle =="
 ls -lh "${OUT}/idbloader.img" "${OUT}/u-boot.itb" \
     "${OUT}/logo.img" \
     "${OUT}/firmware-update.bin" \
+    "${OUT}/uboot-spi-update.request" \
     "${OUT}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin"
 [ -z "${SPI_FIRMWARE_FILE}" ] || ls -lh "${OUT}/${SPI_FIRMWARE_FILE}"
 echo "${OUT}"

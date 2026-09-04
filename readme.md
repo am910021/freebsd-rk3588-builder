@@ -229,6 +229,7 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 |-- logo.img
 |-- nanopc-t6-lts-uboot-16m.bin
 |-- firmware-update.bin
+|-- uboot-spi-update.request
 |-- FIRMWARE-LAYOUT.txt
 |-- BUILD-INFO.txt
 `-- SHA256SUMS
@@ -314,6 +315,11 @@ The primary and redundant environments are 64 KiB at `0xf80000` and
 `0xf90000`. `firmware-update.bin` ends at `0xf80000`, so firmware updates do
 not overwrite either copy. The full board firmware image is for newly
 created disk images or complete external flashing.
+
+`uboot-spi-update.request` records the matching image size and SHA-256. The
+builder leaves both update files in the output bundle; it does not copy the
+request to an EFI System Partition. Copy both files to the ESP only when an
+SPI update should run at the next boot.
 
 The current R81 bundle includes the raw logo, HDMI/vidconsole, FreeBSD EFI
 boot, and a built-in three-second U-Boot menu:
