@@ -353,6 +353,7 @@
 
 &usb_host0_xhci {
 	dr_mode = "host";
+	vbus-supply = <&vcc5v0_otg>;
 	status = "okay";
 };
 
