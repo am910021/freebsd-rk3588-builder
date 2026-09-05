@@ -401,6 +401,9 @@ package。
   `rk3588-installer` package。
 - image 與 installer 安裝完成的目標都會保留 `rk3588-uboot-config`；
   installer payload 內含其離線 package。
+- 安裝成功後，`rk3588-install` 會用此工具在新 ESP 寫入一次性 request，
+  下次開機時自動把剛安裝的 eMMC、SD、USB、NVMe 或 SATA 磁碟設為 U-Boot
+  預設目標。
 - `INSTALLER=YES` 只負責放入 `base.txz`、`kernel.txz`、firmware、DTB
   與離線 packages，不會自行安裝 installer package。
 - image 會安裝 `rtlbt-firmware`，installer payload 也會將這個官方
