@@ -412,6 +412,9 @@ Both `build-u-boot-2026.07-complete.sh` and the image builder use
   `rk3588-installer` package into the image.
 - The image and every installed target include `rk3588-uboot-config`; the
   installer carries its package in the offline payload.
+- After a successful installation, `rk3588-install` uses that tool to write a
+  one-shot request on the new ESP and makes the installed eMMC, SD, USB, NVMe,
+  or SATA disk U-Boot's default target at the next startup.
 - `INSTALLER=YES` embeds `base.txz`, `kernel.txz`, firmware, DTB, and the
   offline packages. It does not install the installer package by itself.
 - The image installs `rtlbt-firmware`, and the installer payload installs that

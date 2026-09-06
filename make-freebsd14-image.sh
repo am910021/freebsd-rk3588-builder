@@ -412,6 +412,10 @@ sendmail_submit_enable="NO"
 sendmail_outbound_enable="NO"
 sendmail_msp_queue_enable="NO"
 EOF
+if [ -n "${DEVMATCH_BLOCKLIST:-}" ]; then
+	echo "devmatch_blocklist=\"${DEVMATCH_BLOCKLIST}\"" >> \
+	    "${root_mnt}/etc/rc.conf"
+fi
 if [ "${SWAP_SIZE_MIB}" -eq 0 ]; then
 	echo 'growfs_swap_size="0"' >> "${root_mnt}/etc/rc.conf"
 fi
