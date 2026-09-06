@@ -64,6 +64,9 @@ done
 [ -n "${UBOOT_LOGO_CONFIG}" ] || fail "UBOOT_LOGO_CONFIG is not configured"
 [ -n "${UBOOT_BINARY_MARKER}" ] ||
     fail "UBOOT_BINARY_MARKER is not configured"
+[ "${UBOOT_FIRMWARE_LAYOUT}" != "spi" ] ||
+    [ -n "${UBOOT_FIRMWARE_COMPAT}" ] ||
+    fail "UBOOT_FIRMWARE_COMPAT is not configured"
 [ -d "${UBOOT_SRC_DIR}" ] || fail "missing source: ${UBOOT_SRC_DIR}"
 [ -z "${UBOOT_SOURCE_FILES_DIR}" ] ||
     [ -d "${UBOOT_SOURCE_FILES_DIR}" ] ||
@@ -193,9 +196,11 @@ if [ "${UBOOT_FIRMWARE_LAYOUT}" = "spi" ]; then
 fi
 
 python3 - "${OUT}" "${FIRMWARE_MIB}" "${UBOOT_LOGO_ENABLE}" \
-    "${BOARD}" "${UBOOT_BINARY_MARKER}" "${UBOOT_FIRMWARE_LAYOUT}" <<'PY'
+    "${BOARD}" "${UBOOT_BINARY_MARKER}" "${UBOOT_FIRMWARE_LAYOUT}" \
+    "${UBOOT_FIRMWARE_COMPAT}" <<'PY'
 from pathlib import Path
 import hashlib
+import re
 import sys
 
 out = Path(sys.argv[1])
@@ -204,6 +209,7 @@ logo_enable = b"1" if sys.argv[3] == "YES" else b"0"
 board = sys.argv[4]
 binary_marker = sys.argv[5].encode()
 firmware_layout = sys.argv[6]
+firmware_compat = sys.argv[7]
 mib = 1024 * 1024
 sector = 512
 idb_offset = 0x40 * sector
@@ -232,6 +238,20 @@ for marker in (
     if marker not in binary:
         raise SystemExit(f"u-boot.bin lacks marker: {marker!r}")
 
+compat_prefix = b"RK3588-FW-COMPAT-V1:"
+version_prefix = b"RK3588-FW-VERSION-V1:"
+if firmware_layout == "spi":
+    match = re.fullmatch(r"[A-Z0-9][A-Z0-9_-]*:SPI:(16|32)M", firmware_compat)
+    if not match or int(match.group(1)) != size_mib:
+        raise SystemExit(
+            f"invalid firmware compatibility identity: {firmware_compat!r}"
+        )
+    compat_marker = compat_prefix + firmware_compat.encode() + b"\0"
+    if binary.count(compat_prefix) != 1 or binary.count(compat_marker) != 1:
+        raise SystemExit("u-boot.bin must contain exactly one compatibility marker")
+    if binary.count(version_prefix) != 1:
+        raise SystemExit("u-boot.bin must contain exactly one version marker")
+
 logo = (out / "logo.bmp").read_bytes()
 if logo[:2] != b"BM" or int.from_bytes(logo[2:6], "little") != len(logo):
     raise SystemExit("logo.bmp has an invalid BMP header or file size")
@@ -253,6 +273,13 @@ for setting in (
 ):
     if setting not in config.splitlines():
         raise SystemExit(f"u-boot.config lacks setting: {setting}")
+if firmware_layout == "spi":
+    for setting in (
+        f'CONFIG_RK3588_FREEBSD_SPI_COMPAT="{firmware_compat}"',
+        f"CONFIG_RK3588_FREEBSD_SPI_LAYOUT_MIB={size_mib}",
+    ):
+        if setting not in config.splitlines():
+            raise SystemExit(f"u-boot.config lacks setting: {setting}")
 
 idb = (out / "idbloader.img").read_bytes()
 uboot = (out / "u-boot.itb").read_bytes()
@@ -297,6 +324,14 @@ for _, offset, data, _ in limits:
 firmware_name = f"{board}-uboot-{size_mib}m.bin"
 (out / firmware_name).write_bytes(firmware)
 firmware_update = bytes(firmware[:env_offset])
+if firmware_layout == "spi":
+    if (firmware_update.count(compat_prefix) != 1 or
+            firmware_update.count(compat_marker) != 1):
+        raise SystemExit(
+            "firmware-update.bin must contain exactly one compatibility marker"
+        )
+    if firmware_update.count(version_prefix) != 1:
+        raise SystemExit("firmware-update.bin must contain exactly one version marker")
 (out / "firmware-update.bin").write_bytes(firmware_update)
 (out / "uboot-spi-update.request").write_text(
     "version=1\n"
@@ -308,6 +343,7 @@ firmware_update = bytes(firmware[:env_offset])
     f"Firmware size: {size_mib} MiB\n"
     "Fill byte: 0xff\n"
     f"Firmware layout: {firmware_layout}\n"
+    f"Firmware compatibility: {firmware_compat or 'not applicable'}\n"
     f"{boot_layout}"
     f"logo.img: LBA 0x6000, {len(logo_raw)} bytes, "
     f"limit {env_offset} bytes\n"

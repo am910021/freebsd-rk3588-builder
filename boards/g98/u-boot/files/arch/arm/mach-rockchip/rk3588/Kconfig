@@ -42,6 +42,22 @@ config RK3588_FREEBSD_SPI_UPDATE
 	  verify the written image, and reset. Enable only on boards whose
 	  firmware layout reserves CONFIG_ENV_OFFSET as the update boundary.
 
+config RK3588_FREEBSD_SPI_COMPAT
+	string "Board-specific SPI firmware compatibility identity"
+	depends on RK3588_FREEBSD_SPI_UPDATE
+	help
+	  Identify the board, SPI layout, and flash capacity. Firmware updates
+	  are accepted only when this identity exactly matches the running
+	  U-Boot. Example: G98:SPI:16M.
+
+config RK3588_FREEBSD_SPI_LAYOUT_MIB
+	int "SPI firmware capacity in MiB"
+	depends on RK3588_FREEBSD_SPI_UPDATE
+	range 16 32
+	help
+	  Firmware layout capacity. The updater rejects a physical SPI NOR that
+	  is too small for this layout before erasing or writing it.
+
 config TARGET_EVB_RK3588
 	bool "Rockchip EVB1 v10"
 	help

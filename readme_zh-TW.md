@@ -233,7 +233,8 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 
 `UBOOT_FIRMWARE_LAYOUT` 依板型設定。MMC 板使用標準 raw MMC layout；G98
 使用 U-Boot 原生的 `u-boot-rockchip-spi.bin`，SPL payload offset 直接依其
-U-Boot 設定產生。
+U-Boot 設定產生。G98 的 W25Q256FW SPI NOR 實體容量雖為 32 MiB，仍維持
+目前實裝的 16 MiB firmware layout。
 
 U-Boot 會依 eMMC、SD、USB、NVMe、SATA/SCSI 順序尋找
 `/EFI/FreeBSD/loader.efi` 並動態產生選單。持久選單設定保存在 U-Boot
@@ -310,6 +311,14 @@ primary 與 redundant environment 各為 64 KiB，位置分別是 `0xf80000`
 兩個更新檔留在輸出 bundle，不會自動將 request 複製到 EFI System
 Partition；只有準備讓 SPI 更新在下次開機執行時，才將兩個檔案一起
 複製到 ESP。
+
+支援 SPI 更新的板子還會用 `UBOOT_FIRMWARE_COMPAT` 設定固定的
+「板型/layout/容量」識別，例如 `G98:SPI:16M`。Builder 會要求 U-Boot 與
+`firmware-update.bin` 各自只包含一份完全相符的 marker。U-Boot 會在移除
+one-shot request 或寫入 SPI 前，比對候選 marker、執行中識別，並確認
+實體 flash 足以容納實裝 layout；缺少、重複、格式損壞、不同板型及
+16/32 MiB 不符都會拒絕。
+U-Boot 版本只供顯示診斷，不會阻擋升級或降級。
 
 目前 R81 包含 raw logo、HDMI/vidconsole、FreeBSD EFI 啟動，以及
 3 秒內建 U-Boot menu：

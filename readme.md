@@ -240,7 +240,8 @@ The same bundle remains under `work/nanopc-t6-lts-uboot-2026.07-16m/`, and
 
 `UBOOT_FIRMWARE_LAYOUT` is board-specific. MMC boards use the standard raw MMC
 layout; G98 uses U-Boot's native `u-boot-rockchip-spi.bin`, whose SPL payload
-offset is taken from its U-Boot configuration.
+offset is taken from its U-Boot configuration. G98 retains its implemented
+16 MiB firmware layout even though its W25Q256FW SPI NOR is physically 32 MiB.
 
 U-Boot discovers `/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and
 SATA/SCSI, in that order, and builds the menu dynamically. Persistent menu
@@ -320,6 +321,15 @@ created disk images or complete external flashing.
 builder leaves both update files in the output bundle; it does not copy the
 request to an EFI System Partition. Copy both files to the ESP only when an
 SPI update should run at the next boot.
+
+SPI update-capable boards also set `UBOOT_FIRMWARE_COMPAT` to a fixed
+board/layout/capacity identity such as `G98:SPI:16M`. The builder requires one
+exact marker in both U-Boot and `firmware-update.bin`. Before removing the
+one-shot request or writing SPI, U-Boot checks that marker against its running
+identity and verifies that the physical flash can contain the implemented
+layout. Missing, duplicate, malformed, different-board, and 16/32 MiB
+mismatches are rejected. The U-Boot version is printed for diagnostics but
+does not block upgrades or downgrades.
 
 The current R81 bundle includes the raw logo, HDMI/vidconsole, FreeBSD EFI
 boot, and a built-in three-second U-Boot menu:
