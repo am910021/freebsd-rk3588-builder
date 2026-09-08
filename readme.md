@@ -244,8 +244,8 @@ The same bundle remains under `work/nanopc-t6-lts-uboot-2026.07-16m/`, and
 MMC layout in the top-level `firmware-update.bin` for installer targets, while
 `spi/firmware-update.bin` uses U-Boot's native Rockchip SPI layout for its
 optional 128-Mbit SPI NOR. G98 uses the SPI layout directly at the top level
-and retains its implemented 16 MiB layout even though its W25Q256FW is
-physically 32 MiB.
+and supports either the 16 MiB or true 32 MiB layout selected by
+`FIRMWARE_MIB`.
 
 U-Boot discovers `/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and
 SATA/SCSI, in that order, and builds the menu dynamically. Persistent menu
@@ -261,21 +261,22 @@ rk3588-uboot-tools set \
     'bootmenu_title=*** FreeBSD U-Boot Boot Menu ***'
 ```
 
-On marker-aware SPI targets, the same tool validates the board/layout marker,
-image size, version marker, and SHA-256 before staging a one-shot update on the
-ESP:
+On marker-aware targets, the same tool validates the board, boot medium,
+capacity, image size, version marker, and SHA-256 before staging a one-shot
+update on the ESP:
 
 ```sh
-rk3588-uboot-tools upgrade verify spi/firmware-update.bin
-rk3588-uboot-tools upgrade spi/firmware-update.bin
+rk3588-uboot-tools upgrade verify firmware-update.bin
+rk3588-uboot-tools upgrade firmware-update.bin
 ```
 
 The `spi/` prefix applies to the dual-layout NanoPC bundle. G98 uses the
 top-level `firmware-update.bin`.
 
-U-Boot verifies the request and image again, preserves its raw environment,
-and compares the complete SPI read-back before resetting. Unsupported targets
-are rejected before files are staged.
+U-Boot verifies the request and image again, selects MMC or SPI from its own
+boot storage, preserves its raw environment, and compares the complete written
+range before resetting. Unsupported targets are rejected before files are
+staged.
 
 Allowed settings are `freebsd_default_boot`, `bootmenu_title`,
 `bootmenu_delay`, and `logo_delay`. The first valid request found in eMMC,
@@ -327,29 +328,26 @@ Updating rkbin requires another complete cold-boot test.
 ```text
 0-8 MiB       Reserved for idbloader/SPL
 8-12 MiB      Reserved for u-boot.itb
-12-15.5 MiB   Raw logo area
-15.5-16 MiB   Redundant U-Boot environment reserve
-16-32 MiB     Future firmware reserve
+12-31.5 MiB   Raw logo and firmware expansion area
+31.5-32 MiB   Redundant U-Boot environment reserve
 ```
 
-The primary and redundant environments are 64 KiB at `0xf80000` and
-`0xf90000`. Every SPI update image ends at `0xf80000`, so it does not overwrite
-either copy. The full board firmware image is for newly created disk images or
-complete external flashing.
+The primary/redundant environments are 64 KiB at `0xf80000`/`0xf90000` for
+16 MiB and `0x1f80000`/`0x1f90000` for 32 MiB. Update images end at the
+selected primary environment offset, so neither copy is overwritten.
 
 `uboot-spi-update.request` records the matching image size and SHA-256. The
 builder leaves both update files in the output bundle; it does not copy the
 request to an EFI System Partition. Use `rk3588-uboot-tools upgrade` to verify
 and stage them only when an SPI update should run at the next boot.
 
-SPI update-capable boards also set `UBOOT_FIRMWARE_COMPAT` to a fixed
-board/layout/capacity identity such as `G98:SPI:16M`. The builder requires one
-exact marker in both U-Boot and its SPI `firmware-update.bin`. Before removing the
-one-shot request or writing SPI, U-Boot checks that marker against its running
-identity and verifies that the physical flash can contain the implemented
-layout. Missing, duplicate, malformed, different-board, and 16/32 MiB
-mismatches are rejected. The U-Boot version is printed for diagnostics but
-does not block upgrades or downgrades.
+Update-capable boards embed a board/capacity identity and a separate fixed
+target marker (`MMC` or `SPI`) in each image. Before removing the one-shot
+request, U-Boot checks both markers against its own boot medium. Same-capacity
+updates are allowed; eMMC/SD 16-to-32 MiB and every 32-to-16 MiB transition are
+rejected. SPI 16-to-32 MiB migration support is present, but its physical test
+is intentionally deferred. The version is diagnostic and does not block
+same-capacity upgrades or downgrades.
 
 The current R81 bundle includes the raw logo, HDMI/vidconsole, FreeBSD EFI
 boot, and a built-in three-second U-Boot menu:

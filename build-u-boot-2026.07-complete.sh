@@ -24,6 +24,11 @@ case "${FIRMWARE_MIB}" in
 		exit 1
 		;;
 esac
+FIRMWARE_BYTES=$((FIRMWARE_MIB * 1024 * 1024))
+ENV_OFFSET=$((FIRMWARE_BYTES - 512 * 1024))
+ENV_OFFSET_REDUND=$((ENV_OFFSET + 64 * 1024))
+ENV_OFFSET_HEX=$(printf '0x%x' "${ENV_OFFSET}")
+ENV_OFFSET_REDUND_HEX=$(printf '0x%x' "${ENV_OFFSET_REDUND}")
 case "${UBOOT_FIRMWARE_LAYOUT}" in
 	mmc|spi) ;;
 	*)
@@ -155,6 +160,13 @@ gmake -C "${BUILD_SOURCE_DIR}" O="${BUILD_DIR}" \
 "${BUILD_SOURCE_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
     --disable TOOLS_MKEFICAPSULE
 "${BUILD_SOURCE_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
+    --set-val ENV_OFFSET "${ENV_OFFSET_HEX}" \
+    --set-val ENV_OFFSET_REDUND "${ENV_OFFSET_REDUND_HEX}"
+[ -z "${UBOOT_FIRMWARE_COMPAT}" ] ||
+    "${BUILD_SOURCE_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
+    --set-str RK3588_FREEBSD_SPI_COMPAT "${UBOOT_FIRMWARE_COMPAT}" \
+    --set-val RK3588_FREEBSD_SPI_LAYOUT_MIB "${FIRMWARE_MIB}"
+"${BUILD_SOURCE_DIR}/scripts/config" --file "${BUILD_DIR}/.config" \
     "${LOGO_CONFIG}" "${UBOOT_LOGO_CONFIG}"
 gmake -C "${BUILD_SOURCE_DIR}" O="${BUILD_DIR}" \
     CROSS_COMPILE="${CROSS_COMPILE}" olddefconfig
@@ -216,10 +228,10 @@ idb_offset = 0x40 * sector
 uboot_offset = 0x4000 * sector
 logo_offset = 0x6000 * sector
 logo_read_size = 0x961 * sector
-env_offset = 0xf80000
-env_offset_redund = 0xf90000
+env_offset = (size_mib * mib) - (512 * 1024)
+env_offset_redund = env_offset + (64 * 1024)
 env_size = 0x10000
-env_reserve_end = 16 * mib
+env_reserve_end = size_mib * mib
 
 binary = (out / "u-boot.bin").read_bytes()
 for marker in (
@@ -240,6 +252,7 @@ for marker in (
 
 compat_prefix = b"RK3588-FW-COMPAT-V1:"
 version_prefix = b"RK3588-FW-VERSION-V1:"
+target_prefix = b"RK3588-FW-TARGET-V1:"
 config = (out / "u-boot.config").read_text(encoding="utf-8")
 spi_update = "CONFIG_RK3588_FREEBSD_SPI_UPDATE=y" in config.splitlines()
 if bool(firmware_compat) != spi_update:
@@ -324,6 +337,18 @@ firmware = bytearray(b"\xff") * (size_mib * mib)
 for _, offset, data, _ in limits:
     firmware[offset:offset + len(data)] = data
 
+board_identity = firmware_compat.split(":", 1)[0]
+target_offset = env_offset - sector
+
+def stamp_target(image, layout):
+    marker = target_prefix + f"{board_identity}:{layout}:{size_mib}M".encode() + b"\0"
+    if any(value != 0xff for value in image[target_offset:target_offset + sector]):
+        raise SystemExit("firmware target marker sector is not empty")
+    image[target_offset:target_offset + len(marker)] = marker
+
+if spi_update:
+    stamp_target(firmware, firmware_layout.upper())
+
 firmware_name = f"{board}-uboot-{size_mib}m.bin"
 (out / firmware_name).write_bytes(firmware)
 firmware_update = bytes(firmware[:env_offset])
@@ -344,6 +369,7 @@ if spi_update:
         spi_firmware = bytearray(b"\xff") * (size_mib * mib)
         spi_firmware[:len(spi)] = spi
         spi_firmware[logo_offset:logo_offset + len(logo_raw)] = logo_raw
+        stamp_target(spi_firmware, "SPI")
         spi_firmware_update = bytes(spi_firmware[:env_offset])
         spi_update_dir = out / "spi"
         spi_update_dir.mkdir()

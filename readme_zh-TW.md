@@ -236,8 +236,8 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 `UBOOT_FIRMWARE_LAYOUT` 依板型設定。NanoPC-T6-LTS 頂層的
 `firmware-update.bin` 保留標準 raw MMC layout，供 installer 寫入一般磁碟；
 `spi/firmware-update.bin` 則使用 U-Boot 原生 Rockchip SPI layout，供選配的
-128-Mbit SPI NOR 升級。G98 直接在頂層使用 SPI layout；其 W25Q256FW 實體
-容量雖為 32 MiB，仍維持目前實裝的 16 MiB firmware layout。
+128-Mbit SPI NOR 升級。G98 直接在頂層使用 SPI layout，並依
+`FIRMWARE_MIB` 使用真正的 16 MiB 或 32 MiB layout。
 
 U-Boot 會依 eMMC、SD、USB、NVMe、SATA/SCSI 順序尋找
 `/EFI/FreeBSD/loader.efi` 並動態產生選單。持久選單設定保存在 U-Boot
@@ -253,19 +253,19 @@ rk3588-uboot-tools set \
     'bootmenu_title=*** FreeBSD U-Boot Boot Menu ***'
 ```
 
-在支援 compatibility marker 的 SPI 目標上，同一工具會先驗證板型／layout
-marker、映像大小、版本 marker 與 SHA-256，再把一次性更新要求放入 ESP：
+在支援 compatibility marker 的目標上，同一工具會先驗證板型、開機媒體、
+容量、映像大小、版本 marker 與 SHA-256，再把一次性更新要求放入 ESP：
 
 ```sh
-rk3588-uboot-tools upgrade verify spi/firmware-update.bin
-rk3588-uboot-tools upgrade spi/firmware-update.bin
+rk3588-uboot-tools upgrade verify firmware-update.bin
+rk3588-uboot-tools upgrade firmware-update.bin
 ```
 
 `spi/` 前綴只適用於同時產生 MMC/SPI layout 的 NanoPC bundle；G98 使用
 頂層的 `firmware-update.bin`。
 
-U-Boot 會再次驗證 request 與映像、保留 raw environment，並在 reset 前完成
-整份 SPI 回讀比對。不支援的目標不會寫入任何更新檔案。
+U-Boot 會再次驗證 request 與映像，依自己的開機媒體選擇 MMC 或 SPI、保留
+raw environment，並在 reset 前完成整段寫入回讀比對。不支援的目標不會寫入。
 
 允許的設定為 `freebsd_default_boot`、`bootmenu_title`、
 `bootmenu_delay` 與 `logo_delay`。下次啟動時會依 eMMC、SD、USB、NVMe、
@@ -314,27 +314,24 @@ v1.18。更新 rkbin 後必須重新進行冷開機測試。
 ```text
 0-8 MiB       idbloader/SPL 保留區
 8-12 MiB      u-boot.itb 保留區
-12-15.5 MiB   logo raw 區域
-15.5-16 MiB   redundant U-Boot environment 保留區
-16-32 MiB     未來 firmware 保留區
+12-31.5 MiB   logo 與 firmware 擴充區域
+31.5-32 MiB   redundant U-Boot environment 保留區
 ```
 
-primary 與 redundant environment 各為 64 KiB，位置分別是 `0xf80000`
-與 `0xf90000`。所有 SPI 更新映像都結束於 `0xf80000`，因此不會覆蓋任一
-份環境；完整 board firmware image 只供建立全新 image 或外部完整燒錄使用。
+16 MiB 的 primary/redundant environment 位於 `0xf80000`/`0xf90000`；
+32 MiB 則位於 `0x1f80000`/`0x1f90000`。更新映像結束於所選容量的 primary
+environment 前，因此不會覆蓋任一份環境。
 
 `uboot-spi-update.request` 會記錄配對映像的大小與 SHA-256。Builder 只把
 兩個更新檔留在輸出 bundle，不會自動將 request 複製到 EFI System
 Partition；只有準備讓 SPI 更新在下次開機執行時，才使用
 `rk3588-uboot-tools upgrade` 驗證並 staging 到 ESP。
 
-支援 SPI 更新的板子還會用 `UBOOT_FIRMWARE_COMPAT` 設定固定的
-「板型/layout/容量」識別，例如 `G98:SPI:16M`。Builder 會要求 U-Boot 與
-其 SPI `firmware-update.bin` 各自只包含一份完全相符的 marker。U-Boot 會在移除
-one-shot request 或寫入 SPI 前，比對候選 marker、執行中識別，並確認
-實體 flash 足以容納實裝 layout；缺少、重複、格式損壞、不同板型及
-16/32 MiB 不符都會拒絕。
-U-Boot 版本只供顯示診斷，不會阻擋升級或降級。
+支援更新的板子會在每個映像內嵌板型／容量識別，以及固定位置的目標媒體
+marker（`MMC` 或 `SPI`）。U-Boot 在移除 one-shot request 前，會將兩者與自己
+的開機媒體比對。同容量更新允許；eMMC/SD 的 16→32 MiB 與所有媒體的
+32→16 MiB 都拒絕。SPI 16→32 MiB 遷移程式會保留，但依專案決定暫不執行
+實機測試。版本只供診斷，不阻擋同容量升級或降級。
 
 目前 R81 包含 raw logo、HDMI/vidconsole、FreeBSD EFI 啟動，以及
 3 秒內建 U-Boot menu：
