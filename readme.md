@@ -229,7 +229,9 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 |-- logo.img
 |-- nanopc-t6-lts-uboot-16m.bin
 |-- firmware-update.bin
-|-- uboot-spi-update.request
+|-- spi/
+|   |-- firmware-update.bin
+|   `-- uboot-spi-update.request
 |-- FIRMWARE-LAYOUT.txt
 |-- BUILD-INFO.txt
 `-- SHA256SUMS
@@ -238,10 +240,12 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 The same bundle remains under `work/nanopc-t6-lts-uboot-2026.07-16m/`, and
 `work/uboot-latest` points to the most recently completed bundle.
 
-`UBOOT_FIRMWARE_LAYOUT` is board-specific. MMC boards use the standard raw MMC
-layout; G98 uses U-Boot's native `u-boot-rockchip-spi.bin`, whose SPL payload
-offset is taken from its U-Boot configuration. G98 retains its implemented
-16 MiB firmware layout even though its W25Q256FW SPI NOR is physically 32 MiB.
+`UBOOT_FIRMWARE_LAYOUT` is board-specific. NanoPC-T6-LTS keeps the standard raw
+MMC layout in the top-level `firmware-update.bin` for installer targets, while
+`spi/firmware-update.bin` uses U-Boot's native Rockchip SPI layout for its
+optional 128-Mbit SPI NOR. G98 uses the SPI layout directly at the top level
+and retains its implemented 16 MiB layout even though its W25Q256FW is
+physically 32 MiB.
 
 U-Boot discovers `/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and
 SATA/SCSI, in that order, and builds the menu dynamically. Persistent menu
@@ -262,9 +266,12 @@ image size, version marker, and SHA-256 before staging a one-shot update on the
 ESP:
 
 ```sh
-rk3588-uboot-tools upgrade verify firmware-update.bin
-rk3588-uboot-tools upgrade firmware-update.bin
+rk3588-uboot-tools upgrade verify spi/firmware-update.bin
+rk3588-uboot-tools upgrade spi/firmware-update.bin
 ```
+
+The `spi/` prefix applies to the dual-layout NanoPC bundle. G98 uses the
+top-level `firmware-update.bin`.
 
 U-Boot verifies the request and image again, preserves its raw environment,
 and compares the complete SPI read-back before resetting. Unsupported targets
@@ -326,18 +333,18 @@ Updating rkbin requires another complete cold-boot test.
 ```
 
 The primary and redundant environments are 64 KiB at `0xf80000` and
-`0xf90000`. `firmware-update.bin` ends at `0xf80000`, so firmware updates do
-not overwrite either copy. The full board firmware image is for newly
-created disk images or complete external flashing.
+`0xf90000`. Every SPI update image ends at `0xf80000`, so it does not overwrite
+either copy. The full board firmware image is for newly created disk images or
+complete external flashing.
 
 `uboot-spi-update.request` records the matching image size and SHA-256. The
 builder leaves both update files in the output bundle; it does not copy the
-request to an EFI System Partition. Copy both files to the ESP only when an
-SPI update should run at the next boot.
+request to an EFI System Partition. Use `rk3588-uboot-tools upgrade` to verify
+and stage them only when an SPI update should run at the next boot.
 
 SPI update-capable boards also set `UBOOT_FIRMWARE_COMPAT` to a fixed
 board/layout/capacity identity such as `G98:SPI:16M`. The builder requires one
-exact marker in both U-Boot and `firmware-update.bin`. Before removing the
+exact marker in both U-Boot and its SPI `firmware-update.bin`. Before removing the
 one-shot request or writing SPI, U-Boot checks that marker against its running
 identity and verifies that the physical flash can contain the implemented
 layout. Missing, duplicate, malformed, different-board, and 16/32 MiB
