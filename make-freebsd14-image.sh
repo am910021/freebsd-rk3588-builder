@@ -191,15 +191,15 @@ case " ${PORT_ORIGINS} " in
 	;;
 esac
 
-uboot_config_pkg=
-for candidate in "${TXZ_ROOT}"/rk3588-uboot-config-*.pkg; do
+uboot_tools_pkg=
+for candidate in "${TXZ_ROOT}"/rk3588-uboot-tools-*.pkg; do
 	[ -f "${candidate}" ] || continue
-	[ -z "${uboot_config_pkg}" ] ||
-	    die "multiple rk3588-uboot-config packages in ${TXZ_ROOT}"
-	uboot_config_pkg=${candidate}
+	[ -z "${uboot_tools_pkg}" ] ||
+	    die "multiple rk3588-uboot-tools packages in ${TXZ_ROOT}"
+	uboot_tools_pkg=${candidate}
 done
-[ -n "${uboot_config_pkg}" ] ||
-    die "no rk3588-uboot-config package found in ${TXZ_ROOT}"
+[ -n "${uboot_tools_pkg}" ] ||
+    die "no rk3588-uboot-tools package found in ${TXZ_ROOT}"
 
 case " ${PORT_ORIGINS} " in
 *" net/motorcomm-yt921x-kmod "*)
@@ -234,7 +234,7 @@ cleanup()
 }
 
 for file in "${pkg_package}" "${rge_pkg}" "${rtlbt_pkg}" \
-    "${uboot_config_pkg}" "${UBOOT_BIN}" \
+    "${uboot_tools_pkg}" "${UBOOT_BIN}" \
     "${UBOOT_UPDATE_BIN}" \
     "${IDBLOADER}" "${UBOOT_ITB}" "${FREEBSD_DTB}" \
     "${LOGO_BMP}"; do
@@ -328,7 +328,7 @@ fi
 ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
     add "${rtlbt_pkg}"
 ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
-    add "${uboot_config_pkg}"
+    add "${uboot_tools_pkg}"
 if [ -n "${installer_pkg}" ]; then
 	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
 	    add "${installer_pkg}"
@@ -365,7 +365,7 @@ if [ "${INSTALLER}" = "YES" ]; then
 		cp -p "${yt921x_pkg}" "${payload}/yt921x.pkg"
 	fi
 	cp -p "${rtlbt_pkg}" "${payload}/rtlbt-firmware.pkg"
-	cp -p "${uboot_config_pkg}" "${payload}/uboot-config.pkg"
+	cp -p "${uboot_tools_pkg}" "${payload}/uboot-tools.pkg"
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
 	if [ -f "${BOARD_DIR}/loader.conf" ]; then
 		cp -p "${BOARD_DIR}/loader.conf" "${payload}/loader.conf.board"
@@ -466,7 +466,7 @@ yt921x_sha=
 if [ -n "${yt921x_pkg}" ]; then
 	yt921x_sha=$(sha256 -q "${yt921x_pkg}")
 fi
-uboot_config_sha=$(sha256 -q "${uboot_config_pkg}")
+uboot_tools_sha=$(sha256 -q "${uboot_tools_pkg}")
 firmware_sha=$(sha256 -q "${UBOOT_BIN}")
 firmware_update_sha=$(sha256 -q "${UBOOT_UPDATE_BIN}")
 idb_sha=$(sha256 -q "${IDBLOADER}")
@@ -483,7 +483,7 @@ base.txz: ${base_sha}
 kernel.txz: ${kernel_sha}
 pkg.pkg: ${pkg_sha}
 if_rge.pkg: ${rge_sha}
-rk3588-uboot-config.pkg: ${uboot_config_sha}
+rk3588-uboot-tools.pkg: ${uboot_tools_sha}
 firmware.bin: ${firmware_sha}
 firmware-update.bin: ${firmware_update_sha}
 idbloader.img: ${idb_sha}
@@ -610,8 +610,8 @@ pkg.pkg: ${pkg_package}
 pkg.pkg SHA256: ${pkg_sha}
 if_rge.pkg: ${rge_pkg}
 if_rge.pkg SHA256: ${rge_sha}
-rk3588-uboot-config.pkg: ${uboot_config_pkg}
-rk3588-uboot-config.pkg SHA256: ${uboot_config_sha}
+rk3588-uboot-tools.pkg: ${uboot_tools_pkg}
+rk3588-uboot-tools.pkg SHA256: ${uboot_tools_sha}
 EOF
 if [ -n "${yt921x_pkg}" ]; then
 	cat >> "${OUT}.build-info.txt" <<EOF

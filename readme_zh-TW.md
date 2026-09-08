@@ -240,15 +240,26 @@ U-Boot 會依 eMMC、SD、USB、NVMe、SATA/SCSI 順序尋找
 `/EFI/FreeBSD/loader.efi` 並動態產生選單。持久選單設定保存在 U-Boot
 redundant raw environment。
 
-安裝後的 `rk3588-uboot-config` 指令會在已掛載的 ESP 寫入經驗證的
+安裝後的 `rk3588-uboot-tools` 指令會在已掛載的 ESP 寫入經驗證的
 request，並可在同一筆 request 變更多個設定：
 
 ```sh
-rk3588-uboot-config set \
+rk3588-uboot-tools set \
     freebsd_default_boot=usb0:2 \
     bootmenu_delay=5 \
     'bootmenu_title=*** FreeBSD U-Boot Boot Menu ***'
 ```
+
+在支援 compatibility marker 的 SPI 目標上，同一工具會先驗證板型／layout
+marker、映像大小、版本 marker 與 SHA-256，再把一次性更新要求放入 ESP：
+
+```sh
+rk3588-uboot-tools upgrade verify firmware-update.bin
+rk3588-uboot-tools upgrade firmware-update.bin
+```
+
+U-Boot 會再次驗證 request 與映像、保留 raw environment，並在 reset 前完成
+整份 SPI 回讀比對。不支援的目標不會寫入任何更新檔案。
 
 允許的設定為 `freebsd_default_boot`、`bootmenu_title`、
 `bootmenu_delay` 與 `logo_delay`。下次啟動時會依 eMMC、SD、USB、NVMe、
@@ -368,8 +379,8 @@ output/<FreeBSD 版本>/pkg-<版本>.pkg
 output/<FreeBSD 版本>/pkg-<版本>.pkg.sha256
 output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg
 output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg.sha256
-output/<FreeBSD 版本>/rk3588-uboot-config-<版本>.pkg
-output/<FreeBSD 版本>/rk3588-uboot-config-<版本>.pkg.sha256
+output/<FreeBSD 版本>/rk3588-uboot-tools-<版本>.pkg
+output/<FreeBSD 版本>/rk3588-uboot-tools-<版本>.pkg.sha256
 output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg
 output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg.sha256
 ```
@@ -408,7 +419,7 @@ package。
 
 - `PORT_ORIGINS` 包含 `sysutils/rk3588-installer` 時，image 會安裝
   `rk3588-installer` package。
-- image 與 installer 安裝完成的目標都會保留 `rk3588-uboot-config`；
+- image 與 installer 安裝完成的目標都會保留 `rk3588-uboot-tools`；
   installer payload 內含其離線 package。
 - 安裝成功後，`rk3588-install` 會用此工具在新 ESP 寫入一次性 request，
   下次開機時自動把剛安裝的 eMMC、SD、USB、NVMe 或 SATA 磁碟設為 U-Boot

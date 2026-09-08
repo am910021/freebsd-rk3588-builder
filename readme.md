@@ -247,15 +247,28 @@ U-Boot discovers `/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and
 SATA/SCSI, in that order, and builds the menu dynamically. Persistent menu
 settings are kept in U-Boot's redundant raw environment.
 
-The installed `rk3588-uboot-config` command writes a validated request to the
+The installed `rk3588-uboot-tools` command writes a validated request to the
 mounted ESP. Multiple settings can be changed in one transaction:
 
 ```sh
-rk3588-uboot-config set \
+rk3588-uboot-tools set \
     freebsd_default_boot=usb0:2 \
     bootmenu_delay=5 \
     'bootmenu_title=*** FreeBSD U-Boot Boot Menu ***'
 ```
+
+On marker-aware SPI targets, the same tool validates the board/layout marker,
+image size, version marker, and SHA-256 before staging a one-shot update on the
+ESP:
+
+```sh
+rk3588-uboot-tools upgrade verify firmware-update.bin
+rk3588-uboot-tools upgrade firmware-update.bin
+```
+
+U-Boot verifies the request and image again, preserves its raw environment,
+and compares the complete SPI read-back before resetting. Unsupported targets
+are rejected before files are staged.
 
 Allowed settings are `freebsd_default_boot`, `bootmenu_title`,
 `bootmenu_delay`, and `logo_delay`. The first valid request found in eMMC,
@@ -379,8 +392,8 @@ output/<FreeBSD version>/pkg-<version>.pkg
 output/<FreeBSD version>/pkg-<version>.pkg.sha256
 output/<FreeBSD version>/rk3588-installer-<version>.pkg
 output/<FreeBSD version>/rk3588-installer-<version>.pkg.sha256
-output/<FreeBSD version>/rk3588-uboot-config-<version>.pkg
-output/<FreeBSD version>/rk3588-uboot-config-<version>.pkg.sha256
+output/<FreeBSD version>/rk3588-uboot-tools-<version>.pkg
+output/<FreeBSD version>/rk3588-uboot-tools-<version>.pkg.sha256
 output/<FreeBSD version>/rtlbt-firmware-<version>.pkg
 output/<FreeBSD version>/rtlbt-firmware-<version>.pkg.sha256
 ```
@@ -420,7 +433,7 @@ Both `build-u-boot-2026.07-complete.sh` and the image builder use
 
 - Including `sysutils/rk3588-installer` in `PORT_ORIGINS` installs the
   `rk3588-installer` package into the image.
-- The image and every installed target include `rk3588-uboot-config`; the
+- The image and every installed target include `rk3588-uboot-tools`; the
   installer carries its package in the offline payload.
 - After a successful installation, `rk3588-install` uses that tool to write a
   one-shot request on the new ESP and makes the installed eMMC, SD, USB, NVMe,
