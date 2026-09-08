@@ -74,7 +74,7 @@ case $# in
 esac
 
 UBOOT_BIN=${UBOOT_DIR}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin
-UBOOT_UPDATE_BIN=${UBOOT_DIR}/firmware-update.bin
+UBOOT_UPDATE_BIN=${UBOOT_DIR}/firmware-update-mmc.bin
 IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb
 MANIFEST_SCRIPT=${FREEBSD_SRC_DIR}/release/scripts/make-manifest.sh

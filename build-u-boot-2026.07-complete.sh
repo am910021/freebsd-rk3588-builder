@@ -352,10 +352,18 @@ if spi_update:
 firmware_name = f"{board}-uboot-{size_mib}m.bin"
 (out / firmware_name).write_bytes(firmware)
 firmware_update = bytes(firmware[:env_offset])
+(out / f"firmware-update-{firmware_layout}.bin").write_bytes(firmware_update)
 if spi_update:
     if firmware_layout == "spi":
-        spi_update_dir = out
         spi_firmware_update = firmware_update
+        mmc_firmware = bytearray(b"\xff") * (size_mib * mib)
+        mmc_firmware[idb_offset:idb_offset + len(idb)] = idb
+        mmc_firmware[uboot_offset:uboot_offset + len(uboot)] = uboot
+        mmc_firmware[logo_offset:logo_offset + len(logo_raw)] = logo_raw
+        stamp_target(mmc_firmware, "MMC")
+        (out / "firmware-update-mmc.bin").write_bytes(
+            mmc_firmware[:env_offset]
+        )
     else:
         spi = (out / "u-boot-rockchip-spi.bin").read_bytes()
         spi_uboot_offset = int(next(
@@ -371,8 +379,6 @@ if spi_update:
         spi_firmware[logo_offset:logo_offset + len(logo_raw)] = logo_raw
         stamp_target(spi_firmware, "SPI")
         spi_firmware_update = bytes(spi_firmware[:env_offset])
-        spi_update_dir = out / "spi"
-        spi_update_dir.mkdir()
     if (spi_firmware_update.count(compat_prefix) != 1 or
             spi_firmware_update.count(compat_marker) != 1):
         raise SystemExit(
@@ -380,10 +386,9 @@ if spi_update:
         )
     if spi_firmware_update.count(version_prefix) != 1:
         raise SystemExit("firmware-update.bin must contain exactly one version marker")
-(out / "firmware-update.bin").write_bytes(firmware_update)
 if spi_update:
-    (spi_update_dir / "firmware-update.bin").write_bytes(spi_firmware_update)
-    (spi_update_dir / "uboot-spi-update.request").write_text(
+    (out / "firmware-update-spi.bin").write_bytes(spi_firmware_update)
+    (out / "uboot-spi-update.request").write_text(
         "version=1\n"
         f"size={len(spi_firmware_update)}\n"
         f"sha256={hashlib.sha256(spi_firmware_update).hexdigest()}\n"
@@ -400,10 +405,9 @@ if spi_update:
     f"environment primary: 0x{env_offset:x}, {env_size} bytes\n"
     f"environment redundant: 0x{env_offset_redund:x}, {env_size} bytes\n"
     f"environment reserved area: 0x{env_offset:x}-0x{env_reserve_end:x}\n"
-    f"firmware-update.bin: 0x0-0x{env_offset:x}; preserves environment\n"
-    + ("SPI updater: " +
-       ("firmware-update.bin" if firmware_layout == "spi" else
-        "spi/firmware-update.bin") + "\n" if spi_update else "")
+    f"MMC updater: firmware-update-mmc.bin, LBA 64-0x{env_offset // sector:x}\n"
+    + ("SPI updater: firmware-update-spi.bin, "
+       f"0x0-0x{env_offset:x}\n" if spi_update else "")
 )
 PY
 
@@ -411,15 +415,9 @@ SPI_UPDATE_IMAGE=
 SPI_UPDATE_REQUEST=
 SPI_CHECKSUM_FILES=
 if [ -n "${UBOOT_FIRMWARE_COMPAT}" ]; then
-	if [ "${UBOOT_FIRMWARE_LAYOUT}" = spi ]; then
-		SPI_UPDATE_IMAGE=firmware-update.bin
-		SPI_UPDATE_REQUEST=uboot-spi-update.request
-		SPI_CHECKSUM_FILES=${SPI_UPDATE_REQUEST}
-	else
-		SPI_UPDATE_IMAGE=spi/firmware-update.bin
-		SPI_UPDATE_REQUEST=spi/uboot-spi-update.request
-		SPI_CHECKSUM_FILES="${SPI_UPDATE_IMAGE} ${SPI_UPDATE_REQUEST}"
-	fi
+	SPI_UPDATE_IMAGE=firmware-update-spi.bin
+	SPI_UPDATE_REQUEST=uboot-spi-update.request
+	SPI_CHECKSUM_FILES="${SPI_UPDATE_IMAGE} ${SPI_UPDATE_REQUEST}"
 fi
 
 cat > "${OUT}/BUILD-INFO.txt" <<EOF
@@ -439,7 +437,8 @@ Logo: ${LOGO_BMP}
 Logo enabled: ${UBOOT_LOGO_ENABLE}
 FreeBSD DTS: ${FREEBSD_DTS}
 Firmware image: ${BOARD}-uboot-${FIRMWARE_MIB}m.bin
-Firmware update image: ${SPI_UPDATE_IMAGE:-not supported}
+Firmware update MMC image: firmware-update-mmc.bin
+Firmware update SPI image: ${SPI_UPDATE_IMAGE:-not supported}
 Firmware update request: ${SPI_UPDATE_REQUEST:-not supported}
 Firmware size: ${FIRMWARE_MIB} MiB
 Firmware layout: ${UBOOT_FIRMWARE_LAYOUT}
@@ -451,7 +450,7 @@ EOF
 	    uboot-control.dtb freebsd-runtime.dtb \
 	    logo.bmp logo.img \
 	    "${BOARD}-uboot-${FIRMWARE_MIB}m.bin" \
-	    firmware-update.bin ${SPI_CHECKSUM_FILES} \
+	    firmware-update-mmc.bin ${SPI_CHECKSUM_FILES} \
 	    ${SPI_FIRMWARE_FILE} \
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt > SHA256SUMS
 )
@@ -480,7 +479,7 @@ PUBLISH_STAGING=
 echo "== ${BOARD} U-Boot ${UBOOT_VERSION} complete bundle =="
 ls -lh "${OUT}/idbloader.img" "${OUT}/u-boot.itb" \
     "${OUT}/logo.img" \
-    "${OUT}/firmware-update.bin" \
+    "${OUT}/firmware-update-mmc.bin" \
     "${OUT}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin"
 [ -z "${SPI_FIRMWARE_FILE}" ] || ls -lh "${OUT}/${SPI_FIRMWARE_FILE}"
 [ -z "${SPI_UPDATE_IMAGE}" ] ||

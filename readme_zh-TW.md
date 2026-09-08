@@ -221,10 +221,9 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 ├── logo.bmp
 ├── logo.img
 ├── nanopc-t6-lts-uboot-16m.bin
-├── firmware-update.bin
-├── spi/
-│   ├── firmware-update.bin
-│   └── uboot-spi-update.request
+├── firmware-update-mmc.bin
+├── firmware-update-spi.bin
+├── uboot-spi-update.request
 ├── FIRMWARE-LAYOUT.txt
 ├── BUILD-INFO.txt
 └── SHA256SUMS
@@ -233,11 +232,11 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 同一份 bundle 仍會保留在 `work/nanopc-t6-lts-uboot-2026.07-16m/`，
 `work/uboot-latest` 會指向最新完成的 bundle。
 
-`UBOOT_FIRMWARE_LAYOUT` 依板型設定。NanoPC-T6-LTS 頂層的
-`firmware-update.bin` 保留標準 raw MMC layout，供 installer 寫入一般磁碟；
-`spi/firmware-update.bin` 則使用 U-Boot 原生 Rockchip SPI layout，供選配的
-128-Mbit SPI NOR 升級。G98 直接在頂層使用 SPI layout，並依
-`FIRMWARE_MIB` 使用真正的 16 MiB 或 32 MiB layout。
+每個板型 bundle 都包含供 eMMC/SD 使用的 `firmware-update-mmc.bin`，以及
+供 SPI NOR 使用的 `firmware-update-spi.bin`。兩者的 U-Boot 功能相同，但
+Rockchip raw boot layout 不能互換；installer 永遠使用 MMC 映像。
+`UBOOT_FIRMWARE_LAYOUT` 只決定供外部完整燒錄的
+`<board>-uboot-<size>m.bin` layout。
 
 U-Boot 會依 eMMC、SD、USB、NVMe、SATA/SCSI 順序尋找
 `/EFI/FreeBSD/loader.efi` 並動態產生選單。持久選單設定保存在 U-Boot
@@ -257,12 +256,13 @@ rk3588-uboot-tools set \
 容量、映像大小、版本 marker 與 SHA-256，再把一次性更新要求放入 ESP：
 
 ```sh
-rk3588-uboot-tools upgrade verify firmware-update.bin
-rk3588-uboot-tools upgrade firmware-update.bin
+rk3588-uboot-tools upgrade verify firmware-update-mmc.bin
+rk3588-uboot-tools upgrade firmware-update-mmc.bin
 ```
 
-`spi/` 前綴只適用於同時產生 MMC/SPI layout 的 NanoPC bundle；G98 使用
-頂層的 `firmware-update.bin`。
+只有 U-Boot 本身從 SPI 執行時才改用 `firmware-update-spi.bin`。固定位置的
+target marker 對 eMMC/SD 為 `MMC`，對 SPI NOR 為 `SPI`；不符合時會在移除
+request 或寫入儲存裝置前拒絕更新。
 
 U-Boot 會再次驗證 request 與映像，依自己的開機媒體選擇 MMC 或 SPI、保留
 raw environment，並在 reset 前完成整段寫入回讀比對。不支援的目標不會寫入。

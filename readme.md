@@ -228,10 +228,9 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 |-- logo.bmp
 |-- logo.img
 |-- nanopc-t6-lts-uboot-16m.bin
-|-- firmware-update.bin
-|-- spi/
-|   |-- firmware-update.bin
-|   `-- uboot-spi-update.request
+|-- firmware-update-mmc.bin
+|-- firmware-update-spi.bin
+|-- uboot-spi-update.request
 |-- FIRMWARE-LAYOUT.txt
 |-- BUILD-INFO.txt
 `-- SHA256SUMS
@@ -240,12 +239,11 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 The same bundle remains under `work/nanopc-t6-lts-uboot-2026.07-16m/`, and
 `work/uboot-latest` points to the most recently completed bundle.
 
-`UBOOT_FIRMWARE_LAYOUT` is board-specific. NanoPC-T6-LTS keeps the standard raw
-MMC layout in the top-level `firmware-update.bin` for installer targets, while
-`spi/firmware-update.bin` uses U-Boot's native Rockchip SPI layout for its
-optional 128-Mbit SPI NOR. G98 uses the SPI layout directly at the top level
-and supports either the 16 MiB or true 32 MiB layout selected by
-`FIRMWARE_MIB`.
+Every board bundle contains `firmware-update-mmc.bin` for eMMC/SD and
+`firmware-update-spi.bin` for SPI NOR. They contain the same U-Boot features,
+but their raw Rockchip boot layouts are not interchangeable. The installer
+always uses the MMC image. `UBOOT_FIRMWARE_LAYOUT` selects only the layout of
+the full `<board>-uboot-<size>m.bin` external-flashing image.
 
 U-Boot discovers `/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and
 SATA/SCSI, in that order, and builds the menu dynamically. Persistent menu
@@ -266,12 +264,13 @@ capacity, image size, version marker, and SHA-256 before staging a one-shot
 update on the ESP:
 
 ```sh
-rk3588-uboot-tools upgrade verify firmware-update.bin
-rk3588-uboot-tools upgrade firmware-update.bin
+rk3588-uboot-tools upgrade verify firmware-update-mmc.bin
+rk3588-uboot-tools upgrade firmware-update-mmc.bin
 ```
 
-The `spi/` prefix applies to the dual-layout NanoPC bundle. G98 uses the
-top-level `firmware-update.bin`.
+Use `firmware-update-spi.bin` instead only when U-Boot itself runs from SPI.
+The fixed target marker is `MMC` for eMMC/SD and `SPI` for SPI NOR; a mismatch
+is rejected before the request is removed or storage is written.
 
 U-Boot verifies the request and image again, selects MMC or SPI from its own
 boot storage, preserves its raw environment, and compares the complete written
