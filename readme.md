@@ -227,7 +227,8 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 |-- freebsd-runtime.dtb
 |-- logo.bmp
 |-- logo.img
-|-- nanopc-t6-lts-uboot-16m.bin
+|-- nanopc-t6-lts-uboot-16m-mmc.bin
+|-- nanopc-t6-lts-uboot-16m-spi.bin
 |-- firmware-update-mmc.bin
 |-- firmware-update-spi.bin
 |-- uboot-spi-update.request
@@ -239,11 +240,13 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 The same bundle remains under `work/nanopc-t6-lts-uboot-2026.07-16m/`, and
 `work/uboot-latest` points to the most recently completed bundle.
 
-Every board bundle contains `firmware-update-mmc.bin` for eMMC/SD and
-`firmware-update-spi.bin` for SPI NOR. They contain the same U-Boot features,
+Every board bundle contains both complete external-flashing images:
+`<board>-uboot-<size>m-mmc.bin` for eMMC/SD and
+`<board>-uboot-<size>m-spi.bin` for SPI NOR. It also contains the corresponding
+environment-preserving online-update payloads, `firmware-update-mmc.bin` and
+`firmware-update-spi.bin`. All four images contain the same U-Boot features,
 but their raw Rockchip boot layouts are not interchangeable. The installer
-always uses the MMC image. `UBOOT_FIRMWARE_LAYOUT` selects only the layout of
-the full `<board>-uboot-<size>m.bin` external-flashing image.
+always uses the complete MMC image for its GPT firmware partition.
 
 U-Boot discovers `/EFI/FreeBSD/loader.efi` on eMMC, SD, USB, NVMe, and
 SATA/SCSI, in that order, and builds the menu dynamically. Persistent menu

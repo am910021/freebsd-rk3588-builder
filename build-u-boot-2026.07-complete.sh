@@ -29,14 +29,6 @@ ENV_OFFSET=$((FIRMWARE_BYTES - 512 * 1024))
 ENV_OFFSET_REDUND=$((ENV_OFFSET + 64 * 1024))
 ENV_OFFSET_HEX=$(printf '0x%x' "${ENV_OFFSET}")
 ENV_OFFSET_REDUND_HEX=$(printf '0x%x' "${ENV_OFFSET_REDUND}")
-case "${UBOOT_FIRMWARE_LAYOUT}" in
-	mmc|spi) ;;
-	*)
-		echo "${0##*/}: U-Boot firmware layout must be mmc or spi" >&2
-		exit 1
-		;;
-esac
-
 FINAL_OUT=${WORK_ROOT}/${BOARD}-uboot-${UBOOT_VERSION}-${FIRMWARE_MIB}m
 WORK=${WORK:-}
 LOGO_BMP=${LOGO_BMP:-${UBOOT_LOGO_BMP}}
@@ -69,8 +61,7 @@ done
 [ -n "${UBOOT_LOGO_CONFIG}" ] || fail "UBOOT_LOGO_CONFIG is not configured"
 [ -n "${UBOOT_BINARY_MARKER}" ] ||
     fail "UBOOT_BINARY_MARKER is not configured"
-[ "${UBOOT_FIRMWARE_LAYOUT}" != "spi" ] ||
-    [ -n "${UBOOT_FIRMWARE_COMPAT}" ] ||
+[ -n "${UBOOT_FIRMWARE_COMPAT}" ] ||
     fail "UBOOT_FIRMWARE_COMPAT is not configured"
 [ -d "${UBOOT_SRC_DIR}" ] || fail "missing source: ${UBOOT_SRC_DIR}"
 [ -z "${UBOOT_SOURCE_FILES_DIR}" ] ||
@@ -179,8 +170,7 @@ for file in idbloader.img u-boot.itb u-boot.bin u-boot.dtb .config; do
 	[ -f "${BUILD_DIR}/${file}" ] ||
 	    fail "build did not produce: ${file}"
 done
-[ -z "${UBOOT_FIRMWARE_COMPAT}" ] ||
-    [ -f "${BUILD_DIR}/u-boot-rockchip-spi.bin" ] ||
+[ -f "${BUILD_DIR}/u-boot-rockchip-spi.bin" ] ||
     fail "build did not produce: u-boot-rockchip-spi.bin"
 
 FREEBSD_DTS_PP=${WORK}/${BOARD}-freebsd.pp.dts
@@ -201,15 +191,11 @@ cp -p "${BUILD_DIR}/u-boot.bin" "${OUT}/u-boot.bin"
 cp -p "${BUILD_DIR}/u-boot.dtb" "${OUT}/uboot-control.dtb"
 cp -p "${BUILD_DIR}/.config" "${OUT}/u-boot.config"
 cp -p "${LOGO_BMP}" "${OUT}/logo.bmp"
-SPI_FIRMWARE_FILE=
-if [ -n "${UBOOT_FIRMWARE_COMPAT}" ]; then
-	SPI_FIRMWARE_FILE=u-boot-rockchip-spi.bin
-	cp -p "${BUILD_DIR}/${SPI_FIRMWARE_FILE}" "${OUT}/${SPI_FIRMWARE_FILE}"
-fi
+SPI_FIRMWARE_FILE=u-boot-rockchip-spi.bin
+cp -p "${BUILD_DIR}/${SPI_FIRMWARE_FILE}" "${OUT}/${SPI_FIRMWARE_FILE}"
 
 python3 - "${OUT}" "${FIRMWARE_MIB}" "${UBOOT_LOGO_ENABLE}" \
-    "${BOARD}" "${UBOOT_BINARY_MARKER}" "${UBOOT_FIRMWARE_LAYOUT}" \
-    "${UBOOT_FIRMWARE_COMPAT}" <<'PY'
+    "${BOARD}" "${UBOOT_BINARY_MARKER}" "${UBOOT_FIRMWARE_COMPAT}" <<'PY'
 from pathlib import Path
 import hashlib
 import re
@@ -220,8 +206,7 @@ size_mib = int(sys.argv[2])
 logo_enable = b"1" if sys.argv[3] == "YES" else b"0"
 board = sys.argv[4]
 binary_marker = sys.argv[5].encode()
-firmware_layout = sys.argv[6]
-firmware_compat = sys.argv[7]
+firmware_compat = sys.argv[6]
 mib = 1024 * 1024
 sector = 512
 idb_offset = 0x40 * sector
@@ -299,43 +284,29 @@ if spi_update:
 
 idb = (out / "idbloader.img").read_bytes()
 uboot = (out / "u-boot.itb").read_bytes()
-if firmware_layout == "spi":
-    spi = (out / "u-boot-rockchip-spi.bin").read_bytes()
-    spi_uboot_offset = int(next(
-        line.split("=", 1)[1] for line in config.splitlines()
-        if line.startswith("CONFIG_SYS_SPI_U_BOOT_OFFS=")
-    ), 0)
-    if spi[spi_uboot_offset:spi_uboot_offset + 4] != b"\xd0\x0d\xfe\xed":
-        raise SystemExit("SPI image lacks FIT at CONFIG_SYS_SPI_U_BOOT_OFFS")
-    limits = (
-        ("u-boot-rockchip-spi.bin", 0, spi, logo_offset),
-        ("logo.img", logo_offset, logo_raw, env_offset),
-    )
-    boot_layout = (
-        f"u-boot-rockchip-spi.bin: offset 0x0, {len(spi)} bytes, "
-        "limit 12 MiB\n"
-        f"SPL payload: 0x{spi_uboot_offset:x}\n"
-    )
-else:
-    limits = (
-        ("idbloader.img", idb_offset, idb, uboot_offset),
-        ("u-boot.itb", uboot_offset, uboot, logo_offset),
-        ("logo.img", logo_offset, logo_raw, env_offset),
-    )
-    boot_layout = (
-        f"idbloader.img: LBA 0x40, {len(idb)} bytes, limit 8 MiB\n"
-        f"u-boot.itb: LBA 0x4000, {len(uboot)} bytes, limit 12 MiB\n"
-    )
-for name, offset, data, limit in limits:
+spi = (out / "u-boot-rockchip-spi.bin").read_bytes()
+spi_uboot_offset = int(next(
+    line.split("=", 1)[1] for line in config.splitlines()
+    if line.startswith("CONFIG_SYS_SPI_U_BOOT_OFFS=")
+), 0)
+if spi[spi_uboot_offset:spi_uboot_offset + 4] != b"\xd0\x0d\xfe\xed":
+    raise SystemExit("SPI image lacks FIT at CONFIG_SYS_SPI_U_BOOT_OFFS")
+
+mmc_parts = (
+    ("idbloader.img", idb_offset, idb, uboot_offset),
+    ("u-boot.itb", uboot_offset, uboot, logo_offset),
+    ("MMC logo.img", logo_offset, logo_raw, env_offset),
+)
+spi_parts = (
+    ("u-boot-rockchip-spi.bin", 0, spi, logo_offset),
+    ("SPI logo.img", logo_offset, logo_raw, env_offset),
+)
+for name, offset, data, limit in mmc_parts + spi_parts:
     if offset + len(data) > limit:
         raise SystemExit(
             f"{name} ends at {offset + len(data)} bytes, "
             f"past its {limit}-byte limit"
         )
-
-firmware = bytearray(b"\xff") * (size_mib * mib)
-for _, offset, data, _ in limits:
-    firmware[offset:offset + len(data)] = data
 
 board_identity = firmware_compat.split(":", 1)[0]
 target_offset = env_offset - sector
@@ -346,60 +317,52 @@ def stamp_target(image, layout):
         raise SystemExit("firmware target marker sector is not empty")
     image[target_offset:target_offset + len(marker)] = marker
 
-if spi_update:
-    stamp_target(firmware, firmware_layout.upper())
+mmc_firmware = bytearray(b"\xff") * (size_mib * mib)
+spi_firmware = bytearray(b"\xff") * (size_mib * mib)
+for _, offset, data, _ in mmc_parts:
+    mmc_firmware[offset:offset + len(data)] = data
+for _, offset, data, _ in spi_parts:
+    spi_firmware[offset:offset + len(data)] = data
+stamp_target(mmc_firmware, "MMC")
+stamp_target(spi_firmware, "SPI")
 
-firmware_name = f"{board}-uboot-{size_mib}m.bin"
-(out / firmware_name).write_bytes(firmware)
-firmware_update = bytes(firmware[:env_offset])
-(out / f"firmware-update-{firmware_layout}.bin").write_bytes(firmware_update)
-if spi_update:
-    if firmware_layout == "spi":
-        spi_firmware_update = firmware_update
-        mmc_firmware = bytearray(b"\xff") * (size_mib * mib)
-        mmc_firmware[idb_offset:idb_offset + len(idb)] = idb
-        mmc_firmware[uboot_offset:uboot_offset + len(uboot)] = uboot
-        mmc_firmware[logo_offset:logo_offset + len(logo_raw)] = logo_raw
-        stamp_target(mmc_firmware, "MMC")
-        (out / "firmware-update-mmc.bin").write_bytes(
-            mmc_firmware[:env_offset]
-        )
-    else:
-        spi = (out / "u-boot-rockchip-spi.bin").read_bytes()
-        spi_uboot_offset = int(next(
-            line.split("=", 1)[1] for line in config.splitlines()
-            if line.startswith("CONFIG_SYS_SPI_U_BOOT_OFFS=")
-        ), 0)
-        if spi[spi_uboot_offset:spi_uboot_offset + 4] != b"\xd0\x0d\xfe\xed":
-            raise SystemExit("SPI image lacks FIT at CONFIG_SYS_SPI_U_BOOT_OFFS")
-        if len(spi) > logo_offset:
-            raise SystemExit("u-boot-rockchip-spi.bin overlaps the logo area")
-        spi_firmware = bytearray(b"\xff") * (size_mib * mib)
-        spi_firmware[:len(spi)] = spi
-        spi_firmware[logo_offset:logo_offset + len(logo_raw)] = logo_raw
-        stamp_target(spi_firmware, "SPI")
-        spi_firmware_update = bytes(spi_firmware[:env_offset])
-    if (spi_firmware_update.count(compat_prefix) != 1 or
-            spi_firmware_update.count(compat_marker) != 1):
+mmc_name = f"{board}-uboot-{size_mib}m-mmc.bin"
+spi_name = f"{board}-uboot-{size_mib}m-spi.bin"
+(out / mmc_name).write_bytes(mmc_firmware)
+(out / spi_name).write_bytes(spi_firmware)
+mmc_firmware_update = bytes(mmc_firmware[:env_offset])
+spi_firmware_update = bytes(spi_firmware[:env_offset])
+(out / "firmware-update-mmc.bin").write_bytes(mmc_firmware_update)
+(out / "firmware-update-spi.bin").write_bytes(spi_firmware_update)
+
+for name, image in (
+    ("firmware-update-mmc.bin", mmc_firmware_update),
+    ("firmware-update-spi.bin", spi_firmware_update),
+):
+    if (image.count(compat_prefix) != 1 or
+            image.count(compat_marker) != 1):
         raise SystemExit(
-            "firmware-update.bin must contain exactly one compatibility marker"
+            f"{name} must contain exactly one compatibility marker"
         )
-    if spi_firmware_update.count(version_prefix) != 1:
-        raise SystemExit("firmware-update.bin must contain exactly one version marker")
-if spi_update:
-    (out / "firmware-update-spi.bin").write_bytes(spi_firmware_update)
-    (out / "uboot-spi-update.request").write_text(
-        "version=1\n"
-        f"size={len(spi_firmware_update)}\n"
-        f"sha256={hashlib.sha256(spi_firmware_update).hexdigest()}\n"
-    )
+    if image.count(version_prefix) != 1:
+        raise SystemExit(f"{name} must contain exactly one version marker")
+(out / "uboot-spi-update.request").write_text(
+    "version=1\n"
+    f"size={len(spi_firmware_update)}\n"
+    f"sha256={hashlib.sha256(spi_firmware_update).hexdigest()}\n"
+)
 (out / "logo.img").write_bytes(logo_raw)
 (out / "FIRMWARE-LAYOUT.txt").write_text(
     f"Firmware size: {size_mib} MiB\n"
     "Fill byte: 0xff\n"
-    f"Firmware layout: {firmware_layout}\n"
     f"Firmware compatibility: {firmware_compat or 'not applicable'}\n"
-    f"{boot_layout}"
+    f"MMC image: {mmc_name}\n"
+    f"  idbloader.img: LBA 0x40, {len(idb)} bytes, limit 8 MiB\n"
+    f"  u-boot.itb: LBA 0x4000, {len(uboot)} bytes, limit 12 MiB\n"
+    f"SPI image: {spi_name}\n"
+    f"  u-boot-rockchip-spi.bin: offset 0x0, {len(spi)} bytes, "
+    "limit 12 MiB\n"
+    f"  SPL payload: 0x{spi_uboot_offset:x}\n"
     f"logo.img: LBA 0x6000, {len(logo_raw)} bytes, "
     f"limit {env_offset} bytes\n"
     f"environment primary: 0x{env_offset:x}, {env_size} bytes\n"
@@ -410,15 +373,6 @@ if spi_update:
        f"0x0-0x{env_offset:x}\n" if spi_update else "")
 )
 PY
-
-SPI_UPDATE_IMAGE=
-SPI_UPDATE_REQUEST=
-SPI_CHECKSUM_FILES=
-if [ -n "${UBOOT_FIRMWARE_COMPAT}" ]; then
-	SPI_UPDATE_IMAGE=firmware-update-spi.bin
-	SPI_UPDATE_REQUEST=uboot-spi-update.request
-	SPI_CHECKSUM_FILES="${SPI_UPDATE_IMAGE} ${SPI_UPDATE_REQUEST}"
-fi
 
 cat > "${OUT}/BUILD-INFO.txt" <<EOF
 Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
@@ -436,12 +390,12 @@ Jobs: ${JOBS}
 Logo: ${LOGO_BMP}
 Logo enabled: ${UBOOT_LOGO_ENABLE}
 FreeBSD DTS: ${FREEBSD_DTS}
-Firmware image: ${BOARD}-uboot-${FIRMWARE_MIB}m.bin
+Firmware MMC image: ${BOARD}-uboot-${FIRMWARE_MIB}m-mmc.bin
+Firmware SPI image: ${BOARD}-uboot-${FIRMWARE_MIB}m-spi.bin
 Firmware update MMC image: firmware-update-mmc.bin
-Firmware update SPI image: ${SPI_UPDATE_IMAGE:-not supported}
-Firmware update request: ${SPI_UPDATE_REQUEST:-not supported}
+Firmware update SPI image: firmware-update-spi.bin
+Firmware update request: uboot-spi-update.request
 Firmware size: ${FIRMWARE_MIB} MiB
-Firmware layout: ${UBOOT_FIRMWARE_LAYOUT}
 EOF
 
 (
@@ -449,8 +403,10 @@ EOF
 	sha256 idbloader.img u-boot.itb u-boot.bin u-boot.config \
 	    uboot-control.dtb freebsd-runtime.dtb \
 	    logo.bmp logo.img \
-	    "${BOARD}-uboot-${FIRMWARE_MIB}m.bin" \
-	    firmware-update-mmc.bin ${SPI_CHECKSUM_FILES} \
+	    "${BOARD}-uboot-${FIRMWARE_MIB}m-mmc.bin" \
+	    "${BOARD}-uboot-${FIRMWARE_MIB}m-spi.bin" \
+	    firmware-update-mmc.bin firmware-update-spi.bin \
+	    uboot-spi-update.request \
 	    ${SPI_FIRMWARE_FILE} \
 	    FIRMWARE-LAYOUT.txt BUILD-INFO.txt > SHA256SUMS
 )
@@ -480,9 +436,9 @@ echo "== ${BOARD} U-Boot ${UBOOT_VERSION} complete bundle =="
 ls -lh "${OUT}/idbloader.img" "${OUT}/u-boot.itb" \
     "${OUT}/logo.img" \
     "${OUT}/firmware-update-mmc.bin" \
-    "${OUT}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin"
-[ -z "${SPI_FIRMWARE_FILE}" ] || ls -lh "${OUT}/${SPI_FIRMWARE_FILE}"
-[ -z "${SPI_UPDATE_IMAGE}" ] ||
-    ls -lh "${OUT}/${SPI_UPDATE_IMAGE}" "${OUT}/${SPI_UPDATE_REQUEST}"
+    "${OUT}/firmware-update-spi.bin" \
+    "${OUT}/${BOARD}-uboot-${FIRMWARE_MIB}m-mmc.bin" \
+    "${OUT}/${BOARD}-uboot-${FIRMWARE_MIB}m-spi.bin" \
+    "${OUT}/${SPI_FIRMWARE_FILE}" "${OUT}/uboot-spi-update.request"
 echo "${OUT}"
 echo "${PUBLISH_OUT}"

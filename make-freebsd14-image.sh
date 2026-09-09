@@ -73,7 +73,7 @@ case $# in
 	*) usage ;;
 esac
 
-UBOOT_BIN=${UBOOT_DIR}/${BOARD}-uboot-${FIRMWARE_MIB}m.bin
+UBOOT_BIN=${UBOOT_DIR}/${BOARD}-uboot-${FIRMWARE_MIB}m-mmc.bin
 UBOOT_UPDATE_BIN=${UBOOT_DIR}/firmware-update-mmc.bin
 IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb

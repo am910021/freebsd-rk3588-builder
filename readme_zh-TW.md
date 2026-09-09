@@ -220,7 +220,8 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 ├── freebsd-runtime.dtb
 ├── logo.bmp
 ├── logo.img
-├── nanopc-t6-lts-uboot-16m.bin
+├── nanopc-t6-lts-uboot-16m-mmc.bin
+├── nanopc-t6-lts-uboot-16m-spi.bin
 ├── firmware-update-mmc.bin
 ├── firmware-update-spi.bin
 ├── uboot-spi-update.request
@@ -232,11 +233,12 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 同一份 bundle 仍會保留在 `work/nanopc-t6-lts-uboot-2026.07-16m/`，
 `work/uboot-latest` 會指向最新完成的 bundle。
 
-每個板型 bundle 都包含供 eMMC/SD 使用的 `firmware-update-mmc.bin`，以及
-供 SPI NOR 使用的 `firmware-update-spi.bin`。兩者的 U-Boot 功能相同，但
-Rockchip raw boot layout 不能互換；installer 永遠使用 MMC 映像。
-`UBOOT_FIRMWARE_LAYOUT` 只決定供外部完整燒錄的
-`<board>-uboot-<size>m.bin` layout。
+每個板型 bundle 都會同時產生兩份供外部完整燒錄的映像：eMMC/SD 使用
+`<board>-uboot-<size>m-mmc.bin`，SPI NOR 使用
+`<board>-uboot-<size>m-spi.bin`。另外也會產生保留 environment 的對應線上更新
+payload：`firmware-update-mmc.bin` 與 `firmware-update-spi.bin`。四者的
+U-Boot 功能相同，但 Rockchip raw boot layout 不能互換；installer 的 GPT
+firmware partition 永遠使用完整 MMC 映像。
 
 U-Boot 會依 eMMC、SD、USB、NVMe、SATA/SCSI 順序尋找
 `/EFI/FreeBSD/loader.efi` 並動態產生選單。持久選單設定保存在 U-Boot
