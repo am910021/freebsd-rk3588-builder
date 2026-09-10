@@ -1,8 +1,14 @@
 #!/bin/sh
 set -eu
 
-BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
-BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
+# Input: optional BUILDER_ROOT and BUILDER_CONFIG environment variables.
+# Input example: BOARD=g98 BUILDER_CONFIG=/root/freebsd-rk3588-builder/builder.conf
+# Output: loads builder.conf and board.conf, then initializes image-build globals.
+# Output example: ROOTFS_TYPE=ufs and OUT=output/14.3-p16/g98-...img
+load_configuration()
+{
+	BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+	BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
 [ -r "${BUILDER_CONFIG}" ] || {
 	echo "${0##*/}: missing config: ${BUILDER_CONFIG}" >&2
 	exit 1
@@ -50,13 +56,24 @@ OUT=${OUT:-${IMAGE_OUTPUT_DIR}/${BOARD}-freebsd${FREEBSD_OBJ_VERSION}${ROOTFS_SU
 WORK=${WORK:-}
 rge_pkg=
 yt921x_pkg=
+}
 
+# Input: no positional parameters; script name is read from "$0".
+# Input example: usage
+# Output: prints the supported command line to stderr and exits with status 1.
+# Output example: usage: make-freebsd14-image.sh [base.txz kernel.txz ...]
 usage()
 {
 	echo "usage: ${0##*/} [base.txz kernel.txz realtek-rge-kmod.pkg [output.img]]" >&2
 	exit 1
 }
 
+# Input: zero, three or four command-line arguments in "$@" plus configured paths.
+# Input example: parse_arguments base.txz kernel.txz if_rge.pkg output.img
+# Output: optionally overrides BASE_TXZ, KERNEL_TXZ, rge_pkg and OUT; sets U-Boot paths.
+# Output example: UBOOT_BIN=<UBOOT_DIR>/g98-uboot-16m-mmc.bin
+parse_arguments()
+{
 case $# in
 	0) ;;
 	3)
@@ -78,17 +95,22 @@ UBOOT_UPDATE_BIN=${UBOOT_DIR}/firmware-update-mmc.bin
 IDBLOADER=${UBOOT_DIR}/idbloader.img
 UBOOT_ITB=${UBOOT_DIR}/u-boot.itb
 MANIFEST_SCRIPT=${FREEBSD_SRC_DIR}/release/scripts/make-manifest.sh
+}
 
+# Input: error text in "$*"; no required global variables.
+# Input example: die "missing input: base.txz"
+# Output: writes "<script>: MESSAGE" to stderr and exits with status 1.
+# Output example: make-freebsd14-image.sh: missing input: base.txz
 die()
 {
 	echo "${0##*/}: $*" >&2
 	exit 1
 }
 
-for file in "${BASE_TXZ}" "${KERNEL_TXZ}"; do
-	[ -f "${file}" ] || die "missing input: ${file}"
-done
-
+# Input: provider name in "$1" and partition number in "$2".
+# Input example: partition_uuid md0 2
+# Output: prints the matching GPT partition raw UUID, or no output when absent.
+# Output example: 01dd613e-a606-11f1-8811-00e04c68dedc
 partition_uuid()
 {
 	partition_provider=${1}p${2}
@@ -98,6 +120,18 @@ partition_uuid()
 	'
 }
 
+# Input: archive paths and image-layout globals loaded by load_configuration().
+# Input example: ROOTFS_TYPE=ufs FIRMWARE_MIB=16 SWAP_SIZE_MIB=512
+# Output: validates configuration and initializes partition offsets plus runtime globals.
+# Output example: ESP_START=32768 ROOT_PARTITION=4 and md=""
+configure_image_layout()
+{
+	# Validate the two required FreeBSD release archives first.
+for file in "${BASE_TXZ}" "${KERNEL_TXZ}"; do
+	[ -f "${file}" ] || die "missing input: ${file}"
+done
+
+	# Reject invalid labels, sizes and filesystem selections before changing state.
 [ -n "${ROOT_LABEL}" ] || die "ROOT_LABEL is not configured"
 [ -n "${IMAGE_HOSTNAME}" ] || die "IMAGE_HOSTNAME is not configured"
 [ -n "${FREEBSD_DTB_ESP_PATH}" ] ||
@@ -146,7 +180,15 @@ md=
 root_mnt=
 esp_mnt=
 AUTO_WORK=0
+}
 
+# Input: TXZ_ROOT, PORT_ORIGINS and optional rge_pkg from configuration/arguments.
+# Input example: TXZ_ROOT=output/14.3-p16 PORT_ORIGINS="ports-mgmt/pkg ..."
+# Output: selects exactly one package for each required or configured component.
+# Output example: pkg_package=<TXZ_ROOT>/pkg-2.1.2.pkg
+discover_packages()
+{
+	# Select the bootstrap pkg package.
 pkg_package=
 for candidate in "${TXZ_ROOT}"/pkg-*.pkg; do
 	[ -f "${candidate}" ] || continue
@@ -213,7 +255,12 @@ case " ${PORT_ORIGINS} " in
 	    die "no motorcomm-yt921x-kmod package found in ${TXZ_ROOT}"
 	;;
 esac
+}
 
+# Input: global mount/device/work variables updated during image construction.
+# Input example: md=md0 root_mnt=/work/root AUTO_WORK=1
+# Output: best-effort unmount/detach and archives an automatically allocated work tree.
+# Output example: $HOME/ready-to-delete/g98-image.abcd-<timestamp>-<pid>
 cleanup()
 {
 	if [ -n "${esp_mnt}" ]; then
@@ -233,6 +280,13 @@ cleanup()
 	fi
 }
 
+# Input: all selected artifacts, OUT, INSTALLER, ROOTFS_TYPE and host PATH.
+# Input example: INSTALLER=YES ROOTFS_TYPE=ufs OUT=output/g98-installer.img
+# Output: returns 0 only when every input and required host command is available.
+# Output example: no stdout and status 0
+validate_inputs_and_tools()
+{
+	# Verify every artifact selected for this board and image type.
 for file in "${pkg_package}" "${rge_pkg}" "${rtlbt_pkg}" \
     "${uboot_tools_pkg}" "${UBOOT_BIN}" \
     "${UBOOT_UPDATE_BIN}" \
@@ -258,7 +312,15 @@ if [ "${ROOTFS_TYPE}" = "zfs" ]; then
 		    die "missing command: ${cmd}"
 	done
 fi
+}
 
+# Input: optional WORK plus WORK_ROOT, BOARD and OUT globals.
+# Input example: WORK="" WORK_ROOT=/root/freebsd-rk3588-builder/work BOARD=g98
+# Output: creates work/mount directories, installs cleanup trap and sets WORK paths.
+# Output example: WORK=<WORK_ROOT>/tmp/g98-image.abcd and AUTO_WORK=1
+prepare_workspace()
+{
+	# Allocate a disposable work tree unless the caller supplied one.
 if [ -z "${WORK}" ]; then
 	mkdir -p "${WORK_ROOT}/tmp"
 	WORK=$(mktemp -d "${WORK_ROOT}/tmp/${BOARD}-image.XXXXXX")
@@ -273,7 +335,15 @@ mkdir -p "$(dirname "${OUT}")"
 root_mnt="${WORK}/root"
 esp_mnt="${WORK}/esp"
 mkdir -p "${root_mnt}" "${esp_mnt}"
+}
 
+# Input: output/layout/U-Boot globals and prepared WORK mount paths.
+# Input example: OUT=output/g98.img FIRMWARE_MIB=16 ROOTFS_TYPE=ufs
+# Output: creates the raw image, attaches md, writes firmware/GPT and records UUIDs.
+# Output example: md=md0 esp_uuid=<UUID> root_uuid=<UUID>
+create_partitioned_image()
+{
+	# Create the raw image and write the complete MMC firmware before GPT metadata.
 echo "== Creating GPT image =="
 truncate -s $((TOTAL_SECTORS * 512)) "${OUT}"
 echo "== Installing complete ${FIRMWARE_MIB} MiB U-Boot ${UBOOT_VERSION} firmware =="
@@ -307,7 +377,15 @@ if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
 	swap_uuid=$(partition_uuid "${md}" 3)
 	[ -n "${swap_uuid}" ] || die "cannot determine swap partition GUID"
 fi
+}
 
+# Input: attached md partitions, root_mnt, release archives and selected packages.
+# Input example: ROOTFS_TYPE=ufs md=md0 ROOT_PARTITION=4
+# Output: populates the target root and installs all configured offline packages.
+# Output example: <root_mnt>/boot/modules/if_rge.ko
+install_root_filesystem()
+{
+	# Create/mount UFS when selected; ZFS is assembled from this directory later.
 echo "== Installing FreeBSD ${FREEBSD_OBJ_VERSION} root filesystem =="
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 	newfs -U -L "${ROOT_LABEL}" "/dev/${md}p${ROOT_PARTITION}" >/dev/null
@@ -346,7 +424,15 @@ fi
 mkdir -p "${root_mnt}/boot/efi" "${root_mnt}/tmp" \
     "${root_mnt}/var/log" "${root_mnt}/var/tmp"
 touch "${root_mnt}/firstboot"
+}
 
+# Input: INSTALLER and installer artifact/config globals plus populated root_mnt.
+# Input example: INSTALLER=YES with payload below <root_mnt>/usr/local/share
+# Output: for installer images, stages distributions, packages, firmware and config.
+# Output example: <root_mnt>/usr/freebsd-dist/MANIFEST
+stage_installer_payload()
+{
+	# Non-installer images intentionally skip this payload block.
 if [ "${INSTALLER}" = "YES" ]; then
 	distdir="${root_mnt}/usr/freebsd-dist"
 	payload="${root_mnt}/usr/local/share/rk3588-installer"
@@ -379,7 +465,15 @@ ROOT_LABEL=${INSTALL_TARGET_ROOT_LABEL}
 ZFS_POOL_NAME=${ZFS_POOL_NAME}
 EOF
 fi
+}
 
+# Input: filesystem UUIDs, image settings, board files and populated root_mnt.
+# Input example: ROOTFS_TYPE=zfs ZFS_POOL_NAME=nanopc_t6
+# Output: writes fstab, rc.conf and loader.conf for the resulting system.
+# Output example: <root_mnt>/boot/loader.conf
+write_system_configuration()
+{
+	# Write filesystem mounts from generated GPT UUIDs.
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 	printf '/dev/gptid/%s\t/\t\tufs\trw,noatime\t\t1 1\n' \
 	    "${root_uuid}" > "${root_mnt}/etc/fstab"
@@ -457,7 +551,15 @@ fi
 if [ -f "${BOARD_DIR}/loader.conf" ]; then
 	cat "${BOARD_DIR}/loader.conf" >> "${root_mnt}/boot/loader.conf"
 fi
+}
 
+# Input: installed artifact paths, UUIDs and source/configuration globals.
+# Input example: BOARD=g98 FREEBSD_SRC_DIR=<builder>/src/freebsd-src
+# Output: calculates component hashes and writes board image provenance in the root.
+# Output example: <root_mnt>/etc/g98-image-build.txt
+write_root_provenance()
+{
+	# Hash every installed source artifact for reproducibility.
 base_sha=$(sha256 -q "${BASE_TXZ}")
 kernel_sha=$(sha256 -q "${KERNEL_TXZ}")
 pkg_sha=$(sha256 -q "${pkg_package}")
@@ -504,7 +606,15 @@ if [ -n "${swap_uuid}" ]; then
 	echo "Swap partition GUID: ${swap_uuid}" \
 	    >> "${root_mnt}/etc/${BOARD}-image-build.txt"
 fi
+}
 
+# Input: ROOTFS_TYPE, root_mnt, md and calculated root partition sizing.
+# Input example: ROOTFS_TYPE=zfs ROOT_SIZE_MIB=2048 ZFS_POOL_NAME=nanopc_t6
+# Output: flushes UFS or creates and writes the final ZFS root partition image.
+# Output example: /dev/md0p3 contains the completed root filesystem
+finalize_root_filesystem()
+{
+	# Flush staged files before unmounting or converting the root tree.
 sync
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 	df -h "${root_mnt}"
@@ -523,7 +633,15 @@ else
 	dd if="${zfs_image}" of="/dev/${md}p${ROOT_PARTITION}" \
 	    bs=1m conv=sync status=none
 fi
+}
 
+# Input: attached ESP partition, root filesystem, DTB and overlay globals.
+# Input example: ESP_PARTITION=2 FREEBSD_DTB_ESP_PATH=/dtb/freebsd.dtb
+# Output: formats and fills the ESP with loader, DTB and configured overlays.
+# Output example: EFI/BOOT/BOOTAA64.EFI and dtb/freebsd.dtb
+install_esp()
+{
+	# Format and mount the EFI System Partition.
 echo "== Installing ESP =="
 newfs_msdos -L EFI -F 16 "/dev/${md}p${ESP_PARTITION}" >/dev/null
 mount -t msdosfs "/dev/${md}p${ESP_PARTITION}" "${esp_mnt}"
@@ -563,7 +681,15 @@ cp -p "${FREEBSD_DTB}" "${esp_mnt}${FREEBSD_DTB_ESP_PATH}"
 sync
 umount "${esp_mnt}"
 esp_mnt=
+}
 
+# Input: attached md, OUT, UBOOT_BIN, ROOTFS_TYPE and partition globals.
+# Input example: md=md0 OUT=output/g98.img ROOTFS_TYPE=ufs
+# Output: verifies GPT/filesystems and byte-compares embedded raw firmware.
+# Output example: fsck status 0 and no raw firmware verification error
+verify_image()
+{
+	# Verify partition metadata and filesystem integrity without modifying them.
 echo "== Verifying image =="
 gpart show -p "${md}"
 fsck_msdosfs -n "/dev/${md}p${ESP_PARTITION}"
@@ -586,7 +712,15 @@ with image.open("rb") as stream:
 if actual != expected:
     raise SystemExit(f"raw firmware verification failed at offset {offset}")
 PY
+}
 
+# Input: verified OUT plus image/component hashes, layout and provenance globals.
+# Input example: OUT=output/g98.img BOARD=g98 ROOTFS_TYPE=ufs
+# Output: writes the image checksum and human-readable build information files.
+# Output example: <OUT>.sha256 and <OUT>.build-info.txt
+write_image_metadata()
+{
+	# Record the final image hash and complete component provenance.
 image_sha=$(sha256 -q "${OUT}")
 cat > "${OUT}.sha256" <<EOF
 SHA256 (${OUT}) = ${image_sha}
@@ -637,8 +771,43 @@ fi
 cat >> "${OUT}.build-info.txt" <<EOF
   free tail:     ${ROOT_END_MIB}-${IMAGE_SIZE_MIB} MiB
 EOF
+}
 
+# Input: attached md and completed OUT metadata paths.
+# Input example: md=md0 OUT=output/g98.img
+# Output: detaches the image vnode and prints the three final artifact paths.
+# Output example: output/g98.img, output/g98.img.sha256 and .build-info.txt
+report_outputs()
+{
+	# Detach explicitly so cleanup has no remaining md device to process.
 mdconfig -d -u "${md#md}"
 md=
 echo "== Complete =="
 ls -lh "${OUT}" "${OUT}.sha256" "${OUT}.build-info.txt"
+}
+
+# Input: optional environment configuration and zero, three or four CLI arguments.
+# Input example: BOARD=g98 INSTALLER=YES ./make-freebsd14-image.sh
+# Output: creates and verifies a complete RK3588 FreeBSD disk image and metadata.
+# Output example: output/14.3-p16/g98-freebsd14.3-p16-installer-...img
+main()
+{
+	load_configuration
+	parse_arguments "$@"
+	configure_image_layout
+	discover_packages
+	validate_inputs_and_tools
+	prepare_workspace
+	create_partitioned_image
+	install_root_filesystem
+	stage_installer_payload
+	write_system_configuration
+	write_root_provenance
+	finalize_root_filesystem
+	install_esp
+	verify_image
+	write_image_metadata
+	report_outputs
+}
+
+main "$@"
