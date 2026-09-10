@@ -540,8 +540,8 @@ write_checksums()
 # publish_bundle
 # Input: staged OUT plus FINAL_OUT, WORK_ROOT and VERSION_OUTPUT_ROOT globals.
 # Input example: FINAL_OUT=<WORK_ROOT>/g98-uboot-2026.07-16m
-# Output: atomically publishes work and versioned copies and sets OUT/PUBLISH_OUT.
-# Output example: <VERSION_OUTPUT_ROOT>/g98-uboot-2026.07-16m/
+# Output: atomically publishes copies, refreshes latest links and sets OUT/PUBLISH_OUT.
+# Output example: <WORK_ROOT>/g98-uboot-latest -> <OUT>
 publish_bundle()
 {
 	# Archive an older work bundle before replacing it.
@@ -554,8 +554,11 @@ publish_bundle()
 	STAGING_OUT=
 	OUT=${FINAL_OUT}
 
-	# Refresh the latest symlink and copy the bundle through a staging directory.
+	# Keep a stable latest link per board; retain the global link for compatibility.
+	ln -sfn "${OUT}" "${WORK_ROOT}/${BOARD}-uboot-latest"
 	ln -sfn "${OUT}" "${WORK_ROOT}/uboot-latest"
+
+	# Copy the bundle through a staging directory before publishing it.
 	mkdir -p "${VERSION_OUTPUT_ROOT}"
 	PUBLISH_OUT=${VERSION_OUTPUT_ROOT}/${FINAL_OUT##*/}
 	PUBLISH_STAGING=$(mktemp -d "${VERSION_OUTPUT_ROOT}/.${FINAL_OUT##*/}.XXXXXX")

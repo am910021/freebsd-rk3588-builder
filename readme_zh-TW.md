@@ -230,8 +230,10 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 └── SHA256SUMS
 ```
 
-同一份 bundle 仍會保留在 `work/nanopc-t6-lts-uboot-2026.07-16m/`，
-`work/uboot-latest` 會指向最新完成的 bundle。
+同一份 bundle 仍會保留在 `work/nanopc-t6-lts-uboot-2026.07-16m/`。
+`work/<board>-uboot-latest` 會指向該板型最新完成的 bundle，image builder
+預設使用這個板型專屬 link。相容用的 `work/uboot-latest` 仍會指向所有板型中
+最後完成的 bundle；不可用它選取其他板型的 artifact。
 
 每個板型 bundle 都會同時產生兩份供外部完整燒錄的映像：eMMC/SD 使用
 `<board>-uboot-<size>m-mmc.bin`，SPI NOR 使用

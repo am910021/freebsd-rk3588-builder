@@ -237,8 +237,11 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 `-- SHA256SUMS
 ```
 
-The same bundle remains under `work/nanopc-t6-lts-uboot-2026.07-16m/`, and
-`work/uboot-latest` points to the most recently completed bundle.
+The same bundle remains under `work/nanopc-t6-lts-uboot-2026.07-16m/`.
+`work/<board>-uboot-latest` points to that board's most recently completed
+bundle and is the default used by the image builder.  The compatibility link
+`work/uboot-latest` still points to the most recently completed bundle across
+all boards; do not use it to select artifacts for a different board.
 
 Every board bundle contains both complete external-flashing images:
 `<board>-uboot-<size>m-mmc.bin` for eMMC/SD and
