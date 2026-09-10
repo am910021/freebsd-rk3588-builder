@@ -120,8 +120,9 @@ NanoPC-T6 LTS 的 board 設定將 ZFS pool 設為 `nanopc_t6`，bootfs 為
 `nanopc_t6/ROOT/default`。可以用 `ZFS_POOL_NAME` 覆蓋 pool 名稱。
 
 每個 board 都使用相同的外層結構：`board.conf`、`assets/`、`dts/`，以及
-可選的 `loader.conf`。每個 board 指定衍生自 U-Boot upstream DTS 的
-FreeBSD DTS：
+可選的 `loader.conf` 與 `hooks.sh`。`hooks.sh` 只能定義函式；共用腳本
+會呼叫該板實際提供的 hook，未提供的 hook 視為 no-op。每個 board 指定
+衍生自 U-Boot upstream DTS 的 FreeBSD DTS：
 
 ```sh
 FREEBSD_DTS=${BOARD_DIR}/dts/rk3588-nanopc-t6-lts-freebsd.dts
@@ -187,8 +188,9 @@ KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-NORE
 ```
 
 `build-ports.sh` 會用同一套 FreeBSD object tree 與 arm64 toolchain
-建置 `PORT_ORIGINS` 內的所有 origin。image 組裝會安裝清單內建好的
-package，不會在組裝期間編譯 port。
+建置所選 board 的 `PORT_ORIGINS`。可選的
+`board_ports_publish_extra_packages` hook 會發布不是由此 Ports tree 建立的
+runtime package。image 組裝只使用這些輸出，不會在組裝期間編譯 port。
 
 每個 Port 建置前，符合
 `boards/<board>/ports/<category>/<port>/files/patch-*` 的板級 patch 會透過
@@ -391,9 +393,10 @@ output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg
 output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg.sha256
 ```
 
-`build-ports.sh` 會建立本地 `pkg`、driver 與 installer ports，並從已設定的
-FreeBSD 官方 pkg repository 擷取架構無關的 `rtlbt-firmware`
-package。
+`build-ports.sh` 會建立本地 `pkg`、driver 與 installer ports。其他 runtime
+package 由 board hook 加入：NanoPC-T6-LTS 會從已設定的 FreeBSD 官方 pkg
+repository 擷取架構無關的 `rtlbt-firmware`；G98 不會取得或攜帶藍牙
+firmware。
 
 使用 `BOARD=g98` 時，建置受影響的驅動套件也會套用
 `boards/g98/ports/` 內的 G98 專用 patch；其他 board 不會套用。
@@ -432,9 +435,13 @@ package。
   預設目標。
 - `INSTALLER=YES` 只負責放入 `base.txz`、`kernel.txz`、firmware、DTB
   與離線 packages，不會自行安裝 installer package。
-- image 會安裝 `rtlbt-firmware`，installer payload 也會將這個官方
-  package 安裝到目標系統。目標系統不會登記只供 image 使用的
-  `realtek-rge-kmod` 或 `rk3588-installer` package。
+- `boards/<board>/hooks.sh` 決定安裝至 live image 及複製到 installer payload
+  的硬體 package。NanoPC-T6-LTS 包含 if_rge 與 RTL 藍牙 firmware；G98
+  包含 if_rge 與 YT921x。
+- Installer payload 根目錄的 `*.pkg` 會透過 offline `pkg add` 一次安裝；
+  `payload/non-registered/` 下的 package 只解壓、不登記至 package database。
+  目前兩張板的 if_rge 都放在 non-registered 類別。
+- `rk3588-installer` 本身仍只安裝在 live image，不複製到 target payload。
 - image 與 installer payload 會包含本地編譯的 `pkg` package，避免 base
   system 的 pkg bootstrap stub 在安裝本地 package 前需要網路連線。
 

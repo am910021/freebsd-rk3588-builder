@@ -54,8 +54,9 @@ if [ "${INSTALLER}" = "YES" ]; then
 fi
 OUT=${OUT:-${IMAGE_OUTPUT_DIR}/${BOARD}-freebsd${FREEBSD_OBJ_VERSION}${ROOTFS_SUFFIX}-uboot${UBOOT_VERSION}-${FIRMWARE_MIB}m-${STAMP}.img}
 WORK=${WORK:-}
-rge_pkg=
-yt921x_pkg=
+BOARD_PACKAGE_OVERRIDE=
+board_registered_packages=
+board_nonregistered_packages=
 }
 
 # Input: no positional parameters; script name is read from "$0".
@@ -64,13 +65,13 @@ yt921x_pkg=
 # Output example: usage: make-freebsd14-image.sh [base.txz kernel.txz ...]
 usage()
 {
-	echo "usage: ${0##*/} [base.txz kernel.txz realtek-rge-kmod.pkg [output.img]]" >&2
+	echo "usage: ${0##*/} [base.txz kernel.txz board-package.pkg [output.img]]" >&2
 	exit 1
 }
 
 # Input: zero, three or four command-line arguments in "$@" plus configured paths.
-# Input example: parse_arguments base.txz kernel.txz if_rge.pkg output.img
-# Output: optionally overrides BASE_TXZ, KERNEL_TXZ, rge_pkg and OUT; sets U-Boot paths.
+# Input example: parse_arguments base.txz kernel.txz board.pkg output.img
+# Output: optionally overrides BASE_TXZ, KERNEL_TXZ, BOARD_PACKAGE_OVERRIDE and OUT.
 # Output example: UBOOT_BIN=<UBOOT_DIR>/g98-uboot-16m-mmc.bin
 parse_arguments()
 {
@@ -79,12 +80,12 @@ case $# in
 	3)
 		BASE_TXZ=$1
 		KERNEL_TXZ=$2
-		rge_pkg=$3
+		BOARD_PACKAGE_OVERRIDE=$3
 		;;
 	4)
 		BASE_TXZ=$1
 		KERNEL_TXZ=$2
-		rge_pkg=$3
+		BOARD_PACKAGE_OVERRIDE=$3
 		OUT=$4
 		;;
 	*) usage ;;
@@ -118,6 +119,61 @@ partition_uuid()
 	    $2 == "Name:" { current = $3 }
 	    current == provider && $1 == "rawuuid:" { print $2; exit }
 	'
+}
+
+# select_single_package OVERRIDE GLOB LABEL
+# Input: optional exact path "$1", TXZ_ROOT-relative glob "$2" and label "$3".
+# Input example: select_single_package '' 'board-driver-*.pkg' board-driver
+# Output: sets selected_package to exactly one regular package or exits.
+# Output example: selected_package=/output/14.3-p16/board-driver-1.0.pkg
+select_single_package()
+{
+	package_override=$1
+	package_glob=$2
+	package_label=$3
+	selected_package=
+	if [ -n "${package_override}" ]; then
+		[ -f "${package_override}" ] ||
+		    die "missing ${package_label} package: ${package_override}"
+		selected_package=${package_override}
+		return
+	fi
+	for package_candidate in "${TXZ_ROOT}"/${package_glob}; do
+		[ -f "${package_candidate}" ] || continue
+		[ -z "${selected_package}" ] ||
+		    die "multiple ${package_label} packages in ${TXZ_ROOT}"
+		selected_package=${package_candidate}
+	done
+	[ -n "${selected_package}" ] ||
+	    die "no ${package_label} package found in ${TXZ_ROOT}"
+}
+
+# add_board_package MODE OVERRIDE GLOB
+# Input: mode "$1", optional exact path "$2" and TXZ_ROOT-relative glob "$3".
+# Input example: add_board_package non-registered '' 'board-driver-*.pkg'
+# Output: appends one resolved package path to the selected board package list.
+# Output example: board_nonregistered_packages=".../board-driver-1.0.pkg"
+add_board_package()
+{
+	package_mode=$1
+	package_override=$2
+	package_glob=$3
+	select_single_package "${package_override}" "${package_glob}" \
+	    "${package_glob}"
+	case "${selected_package}" in
+	*[[:space:]]*) die "package path contains whitespace: ${selected_package}" ;;
+	esac
+	case "${package_mode}" in
+	registered)
+		board_registered_packages="${board_registered_packages} ${selected_package}"
+		board_registered_packages=${board_registered_packages# }
+		;;
+	non-registered)
+		board_nonregistered_packages="${board_nonregistered_packages} ${selected_package}"
+		board_nonregistered_packages=${board_nonregistered_packages# }
+		;;
+	*) die "unknown board package mode: ${package_mode}" ;;
+	esac
 }
 
 # Input: archive paths and image-layout globals loaded by load_configuration().
@@ -182,7 +238,7 @@ esp_mnt=
 AUTO_WORK=0
 }
 
-# Input: TXZ_ROOT, PORT_ORIGINS and optional rge_pkg from configuration/arguments.
+# Input: TXZ_ROOT, PORT_ORIGINS and board hooks from configuration.
 # Input example: TXZ_ROOT=output/14.3-p16 PORT_ORIGINS="ports-mgmt/pkg ..."
 # Output: selects exactly one package for each required or configured component.
 # Output example: pkg_package=<TXZ_ROOT>/pkg-2.1.2.pkg
@@ -197,27 +253,6 @@ for candidate in "${TXZ_ROOT}"/pkg-*.pkg; do
 	pkg_package=${candidate}
 done
 [ -n "${pkg_package}" ] || die "no pkg package found in ${TXZ_ROOT}"
-
-if [ -z "${rge_pkg}" ]; then
-	for candidate in "${TXZ_ROOT}"/realtek-rge-kmod-*.pkg; do
-		[ -f "${candidate}" ] || continue
-		[ -z "${rge_pkg}" ] ||
-		    die "multiple if_rge packages in ${TXZ_ROOT}"
-		rge_pkg=${candidate}
-	done
-	[ -n "${rge_pkg}" ] ||
-	    die "no if_rge package found in ${TXZ_ROOT}"
-fi
-
-rtlbt_pkg=
-for candidate in "${TXZ_ROOT}"/rtlbt-firmware-*.pkg; do
-	[ -f "${candidate}" ] || continue
-	[ -z "${rtlbt_pkg}" ] ||
-	    die "multiple rtlbt-firmware packages in ${TXZ_ROOT}"
-	rtlbt_pkg=${candidate}
-done
-[ -n "${rtlbt_pkg}" ] ||
-    die "no rtlbt-firmware package found in ${TXZ_ROOT}"
 
 installer_pkg=
 case " ${PORT_ORIGINS} " in
@@ -243,18 +278,7 @@ done
 [ -n "${uboot_tools_pkg}" ] ||
     die "no rk3588-uboot-tools package found in ${TXZ_ROOT}"
 
-case " ${PORT_ORIGINS} " in
-*" net/motorcomm-yt921x-kmod "*)
-	for candidate in "${TXZ_ROOT}"/motorcomm-yt921x-kmod-*.pkg; do
-		[ -f "${candidate}" ] || continue
-		[ -z "${yt921x_pkg}" ] ||
-		    die "multiple motorcomm-yt921x-kmod packages in ${TXZ_ROOT}"
-		yt921x_pkg=${candidate}
-	done
-	[ -n "${yt921x_pkg}" ] ||
-	    die "no motorcomm-yt921x-kmod package found in ${TXZ_ROOT}"
-	;;
-esac
+run_board_hook board_image_add_packages
 }
 
 # Input: global mount/device/work variables updated during image construction.
@@ -287,15 +311,15 @@ cleanup()
 validate_inputs_and_tools()
 {
 	# Verify every artifact selected for this board and image type.
-for file in "${pkg_package}" "${rge_pkg}" "${rtlbt_pkg}" \
-    "${uboot_tools_pkg}" "${UBOOT_BIN}" \
+for file in "${pkg_package}" "${uboot_tools_pkg}" "${UBOOT_BIN}" \
     "${UBOOT_UPDATE_BIN}" \
     "${IDBLOADER}" "${UBOOT_ITB}" "${FREEBSD_DTB}" \
     "${LOGO_BMP}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
-[ -z "${yt921x_pkg}" ] || [ -f "${yt921x_pkg}" ] ||
-    die "missing input: ${yt921x_pkg}"
+for file in ${board_registered_packages} ${board_nonregistered_packages}; do
+	[ -f "${file}" ] || die "missing board package: ${file}"
+done
 if [ "${INSTALLER}" = "YES" ]; then
 	[ -f "${MANIFEST_SCRIPT}" ] ||
 	    die "missing installer input: ${MANIFEST_SCRIPT}"
@@ -382,7 +406,7 @@ fi
 # Input: attached md partitions, root_mnt, release archives and selected packages.
 # Input example: ROOTFS_TYPE=ufs md=md0 ROOT_PARTITION=4
 # Output: populates the target root and installs all configured offline packages.
-# Output example: <root_mnt>/boot/modules/if_rge.ko
+# Output example: board-selected packages are installed below <root_mnt>
 install_root_filesystem()
 {
 	# Create/mount UFS when selected; ZFS is assembled from this directory later.
@@ -397,14 +421,11 @@ ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
     add "${pkg_package}"
 [ -x "${root_mnt}/usr/local/sbin/pkg" ] ||
     die "pkg package did not install /usr/local/sbin/pkg"
-ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
-    add "${rge_pkg}"
-if [ -n "${yt921x_pkg}" ]; then
+for board_package in ${board_registered_packages} \
+    ${board_nonregistered_packages}; do
 	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
-	    add "${yt921x_pkg}"
-fi
-ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
-    add "${rtlbt_pkg}"
+	    add "${board_package}"
+done
 ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
     add "${uboot_tools_pkg}"
 if [ -n "${installer_pkg}" ]; then
@@ -415,12 +436,6 @@ if [ -d "${BOARD_FILES_DIR}" ]; then
 	(cd "${BOARD_FILES_DIR}" && tar -cpf - .) |
 	    (cd "${root_mnt}" && tar -xpf -)
 fi
-[ -f "${root_mnt}/boot/modules/if_rge.ko" ] ||
-    die "if_rge package did not install /boot/modules/if_rge.ko"
-[ -z "${yt921x_pkg}" ] ||
-    [ -f "${root_mnt}/boot/modules/yt921x.ko" ] ||
-    die "motorcomm-yt921x-kmod did not install /boot/modules/yt921x.ko"
-
 mkdir -p "${root_mnt}/boot/efi" "${root_mnt}/tmp" \
     "${root_mnt}/var/log" "${root_mnt}/var/tmp"
 touch "${root_mnt}/firstboot"
@@ -446,12 +461,17 @@ if [ "${INSTALLER}" = "YES" ]; then
 	)
 	cp -p "${UBOOT_UPDATE_BIN}" "${payload}/firmware-update.bin"
 	cp -p "${pkg_package}" "${payload}/pkg.pkg"
-	cp -p "${rge_pkg}" "${payload}/if_rge.pkg"
-	if [ -n "${yt921x_pkg}" ]; then
-		cp -p "${yt921x_pkg}" "${payload}/yt921x.pkg"
-	fi
-	cp -p "${rtlbt_pkg}" "${payload}/rtlbt-firmware.pkg"
 	cp -p "${uboot_tools_pkg}" "${payload}/uboot-tools.pkg"
+	for board_package in ${board_registered_packages}; do
+		cp -p "${board_package}" "${payload}/${board_package##*/}"
+	done
+	if [ -n "${board_nonregistered_packages}" ]; then
+		mkdir -p "${payload}/non-registered"
+		for board_package in ${board_nonregistered_packages}; do
+			cp -p "${board_package}" \
+			    "${payload}/non-registered/${board_package##*/}"
+		done
+	fi
 	cp -p "${FREEBSD_DTB}" "${payload}/freebsd.dtb"
 	if [ -f "${BOARD_DIR}/loader.conf" ]; then
 		cp -p "${BOARD_DIR}/loader.conf" "${payload}/loader.conf.board"
@@ -528,8 +548,6 @@ autoboot_delay="10"
 hw.rk3588.efi_fdt_highmem="1"
 kern.msgbuf_show_timestamp="2"
 kern.msgbufsize="1048576"
-if_rge_load="YES"
-if_rge_name="/boot/modules/if_rge.ko"
 EOF
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 	cat >> "${root_mnt}/boot/loader.conf" <<EOF
@@ -563,11 +581,6 @@ write_root_provenance()
 base_sha=$(sha256 -q "${BASE_TXZ}")
 kernel_sha=$(sha256 -q "${KERNEL_TXZ}")
 pkg_sha=$(sha256 -q "${pkg_package}")
-rge_sha=$(sha256 -q "${rge_pkg}")
-yt921x_sha=
-if [ -n "${yt921x_pkg}" ]; then
-	yt921x_sha=$(sha256 -q "${yt921x_pkg}")
-fi
 uboot_tools_sha=$(sha256 -q "${uboot_tools_pkg}")
 firmware_sha=$(sha256 -q "${UBOOT_BIN}")
 firmware_update_sha=$(sha256 -q "${UBOOT_UPDATE_BIN}")
@@ -584,7 +597,6 @@ FreeBSD source commit: ${src_commit}
 base.txz: ${base_sha}
 kernel.txz: ${kernel_sha}
 pkg.pkg: ${pkg_sha}
-if_rge.pkg: ${rge_sha}
 rk3588-uboot-tools.pkg: ${uboot_tools_sha}
 firmware.bin: ${firmware_sha}
 firmware-update.bin: ${firmware_update_sha}
@@ -598,10 +610,14 @@ Root filesystem: ${ROOTFS_TYPE}
 Installed ports: ${PORT_ORIGINS}
 Installer payload: ${INSTALLER}
 EOF
-if [ -n "${yt921x_pkg}" ]; then
-	echo "motorcomm-yt921x-kmod.pkg: ${yt921x_sha}" \
+for board_package in ${board_registered_packages}; do
+	echo "Board package (registered): ${board_package##*/} $(sha256 -q "${board_package}")" \
 	    >> "${root_mnt}/etc/${BOARD}-image-build.txt"
-fi
+done
+for board_package in ${board_nonregistered_packages}; do
+	echo "Board package (non-registered): ${board_package##*/} $(sha256 -q "${board_package}")" \
+	    >> "${root_mnt}/etc/${BOARD}-image-build.txt"
+done
 if [ -n "${swap_uuid}" ]; then
 	echo "Swap partition GUID: ${swap_uuid}" \
 	    >> "${root_mnt}/etc/${BOARD}-image-build.txt"
@@ -742,17 +758,17 @@ FreeBSD DTB: ${FREEBSD_DTB}
 U-Boot FDT overlays: ${UBOOT_FDT_OVERLAYS}
 pkg.pkg: ${pkg_package}
 pkg.pkg SHA256: ${pkg_sha}
-if_rge.pkg: ${rge_pkg}
-if_rge.pkg SHA256: ${rge_sha}
 rk3588-uboot-tools.pkg: ${uboot_tools_pkg}
 rk3588-uboot-tools.pkg SHA256: ${uboot_tools_sha}
 EOF
-if [ -n "${yt921x_pkg}" ]; then
-	cat >> "${OUT}.build-info.txt" <<EOF
-motorcomm-yt921x-kmod.pkg: ${yt921x_pkg}
-motorcomm-yt921x-kmod.pkg SHA256: ${yt921x_sha}
-EOF
-fi
+for board_package in ${board_registered_packages}; do
+	echo "Board package (registered): ${board_package} $(sha256 -q "${board_package}")" \
+	    >> "${OUT}.build-info.txt"
+done
+for board_package in ${board_nonregistered_packages}; do
+	echo "Board package (non-registered): ${board_package} $(sha256 -q "${board_package}")" \
+	    >> "${OUT}.build-info.txt"
+done
 cat >> "${OUT}.build-info.txt" <<EOF
 Layout:
   p1 firmware:   0-${FIRMWARE_MIB} MiB

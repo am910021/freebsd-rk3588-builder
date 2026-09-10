@@ -124,7 +124,9 @@ The NanoPC-T6 LTS board settings use `nanopc_t6` as the ZFS pool and
 `ZFS_POOL_NAME`.
 
 Each board uses the same outer layout: `board.conf`, `assets/`, `dts/`, and
-an optional `loader.conf`. Each board specifies a FreeBSD DTS derived from
+optional `loader.conf` and `hooks.sh` files. `hooks.sh` contains function
+definitions only; common scripts call the hooks that the board provides and
+treat missing hooks as no-ops. Each board specifies a FreeBSD DTS derived from
 the upstream U-Boot DTS:
 
 ```sh
@@ -191,10 +193,11 @@ FREEBSD_OBJ=${FREEBSD_OBJ_ROOT}/arm64.aarch64
 KERNBUILDDIR=${FREEBSD_OBJ}/sys/RK3588-NORE
 ```
 
-`build-ports.sh` builds every origin in `PORT_ORIGINS` with the same FreeBSD
-object tree and arm64 toolchain. Image assembly consumes only the resulting
-packages, installs those packages into the image, and never builds ports
-itself.
+`build-ports.sh` builds every origin in the selected board's `PORT_ORIGINS`
+with the same FreeBSD object tree and arm64 toolchain. Its optional
+`board_ports_publish_extra_packages` hook publishes runtime packages that do
+not come from this Ports tree. Image assembly consumes only these outputs and
+never builds ports itself.
 
 Before a Port is built, board-only patches matching
 `boards/<board>/ports/<category>/<port>/files/patch-*` are passed to the
@@ -408,9 +411,10 @@ output/<FreeBSD version>/rtlbt-firmware-<version>.pkg
 output/<FreeBSD version>/rtlbt-firmware-<version>.pkg.sha256
 ```
 
-`build-ports.sh` builds the local `pkg`, driver, and installer ports, then
-fetches the architecture-neutral `rtlbt-firmware` package from the configured
-official FreeBSD pkg repository.
+`build-ports.sh` builds the local `pkg`, driver, and installer ports. Board
+hooks add other runtime packages: NanoPC-T6-LTS fetches the
+architecture-neutral `rtlbt-firmware` package from the configured official
+FreeBSD pkg repository; G98 does not fetch or package Bluetooth firmware.
 
 For `BOARD=g98`, it also applies the G98-only patches under `boards/g98/ports/`
 while building the affected driver packages.  Other boards do not see these
@@ -450,9 +454,14 @@ Both `build-u-boot-2026.07-complete.sh` and the image builder use
   or SATA disk U-Boot's default target at the next startup.
 - `INSTALLER=YES` embeds `base.txz`, `kernel.txz`, firmware, DTB, and the
   offline packages. It does not install the installer package by itself.
-- The image installs `rtlbt-firmware`, and the installer payload installs that
-  official package into the target system. The target does not register the
-  image-only `realtek-rge-kmod` or `rk3588-installer` packages.
+- `boards/<board>/hooks.sh` selects the hardware packages installed in the
+  live image and copied into its installer payload. NanoPC-T6-LTS includes
+  if_rge and RTL Bluetooth firmware; G98 includes if_rge and YT921x.
+- Installer payload `*.pkg` files are installed together with offline
+  `pkg add`. Packages below `payload/non-registered/` are extracted without
+  package-database registration; both current boards place if_rge there.
+- `rk3588-installer` itself remains a live-image package and is not copied to
+  the target payload.
 - The image and installer payload include the locally built `pkg` package.
   This prevents the base-system pkg bootstrap stub from requiring a network
   connection before local packages can be installed.

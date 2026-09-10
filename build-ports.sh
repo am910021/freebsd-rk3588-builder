@@ -239,37 +239,38 @@ build_configured_ports()
 	done
 }
 
-# fetch_rtlbt_firmware
-# Input: global ports_work, TXZ_ROOT and FREEBSD_OBJ_VERSION.
-# Input example: FREEBSD_OBJ_VERSION=14.3-p16
-# Output: fetches, validates and publishes exactly one rtlbt-firmware package.
+# fetch_runtime_package NAME ORIGIN
+# Input: package name "$1", expected origin "$2" and target/output globals.
+# Input example: fetch_runtime_package rtlbt-firmware comms/rtlbt-firmware
+# Output: fetches and publishes one architecture-independent runtime package.
 # Output example: /work/txz/rtlbt-firmware-20251111.pkg
-fetch_rtlbt_firmware()
+fetch_runtime_package()
 {
-	rtlbt_fetch=${ports_work}/rtlbt-firmware-fetch
-	mkdir -p "${rtlbt_fetch}"
+	runtime_name=$1
+	runtime_origin=$2
+	runtime_fetch=${ports_work}/${runtime_name}-fetch
+	mkdir -p "${runtime_fetch}"
 
 	# Fetch the architecture-independent runtime firmware package.
-	pkg fetch -y -o "${rtlbt_fetch}" rtlbt-firmware
-	set -- $(find "${rtlbt_fetch}" -type f -name 'rtlbt-firmware-*.pkg')
-	[ "$#" -eq 1 ] || die "expected one fetched rtlbt-firmware package"
+	pkg fetch -y -o "${runtime_fetch}" "${runtime_name}"
+	set -- $(find "${runtime_fetch}" -type f -name "${runtime_name}-*.pkg")
+	[ "$#" -eq 1 ] || die "expected one fetched ${runtime_name} package"
 	package=$1
 
-	# Verify origin, ABI and version before replacing the published copy.
+	# Verify origin and ABI before replacing the published copy.
 	pkg_origin=$(pkg query -F "${package}" '%o')
 	pkg_abi=$(pkg query -F "${package}" '%q')
-	pkg_version=$(pkg query -F "${package}" '%v')
-	[ "${pkg_origin}" = "comms/rtlbt-firmware" ] ||
-		die "unexpected rtlbt-firmware origin: ${pkg_origin}"
+	[ "${pkg_origin}" = "${runtime_origin}" ] ||
+		die "unexpected ${runtime_name} origin: ${pkg_origin}"
 	[ "${pkg_abi}" = "FreeBSD:${FREEBSD_OBJ_VERSION%%.*}:*" ] ||
-		die "unexpected rtlbt-firmware ABI: ${pkg_abi}"
-	for existing in "${TXZ_ROOT}"/rtlbt-firmware-*.pkg; do
+		die "unexpected ${runtime_name} ABI: ${pkg_abi}"
+	for existing in "${TXZ_ROOT}"/${runtime_name}-*.pkg; do
 		[ -f "${existing}" ] || continue
 		archive_package "${existing}"
 	done
 
-	# Publish the firmware package and checksum with its resolved version.
-	output_package=${TXZ_ROOT}/rtlbt-firmware-${pkg_version}.pkg
+	# Publish the fetched package and checksum under its original filename.
+	output_package=${TXZ_ROOT}/${package##*/}
 	cp -p "${package}" "${output_package}"
 	sha256 "${output_package}" > "${output_package}.sha256"
 	echo "Package: ${output_package}"
@@ -278,7 +279,7 @@ fetch_rtlbt_firmware()
 # main
 # Input: no command-line arguments; configuration comes from the environment/files.
 # Input example: BOARD=g98 ./build-ports.sh
-# Output: publishes target Ports packages and rtlbt-firmware into TXZ_ROOT.
+# Output: publishes configured Ports and board-selected runtime packages.
 # Output example: /root/freebsd-rk3588-builder/work/txz/14.3-p16/*.pkg
 main()
 {
@@ -286,7 +287,7 @@ main()
 	validate_environment
 	prepare_workspace
 	build_configured_ports
-	fetch_rtlbt_firmware
+	run_board_hook board_ports_publish_extra_packages
 }
 
 main "$@"
