@@ -11,6 +11,11 @@
 	};
 };
 
+&sata0 {
+	phys = <&combphy0_ps PHY_TYPE_SATA>;
+	phy-names = "sata-phy";
+};
+
 &uart2 {
 	bootph-pre-ram;
 };
