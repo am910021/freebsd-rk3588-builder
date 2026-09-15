@@ -653,8 +653,8 @@ fi
 
 # Input: attached ESP partition, root filesystem, DTB and overlay globals.
 # Input example: ESP_PARTITION=2 FREEBSD_DTB_ESP_PATH=/dtb/freebsd.dtb
-# Output: formats and fills the ESP with loader, DTB and configured overlays.
-# Output example: EFI/BOOT/BOOTAA64.EFI and dtb/freebsd.dtb
+# Output: formats and fills the ESP with loader, DTB, overlays and boot entry.
+# Output example: EFI/BOOT/BOOTAA64.EFI and uboot-boot-entry.conf
 install_esp()
 {
 	# Format and mount the EFI System Partition.
@@ -684,16 +684,20 @@ for overlay in ${UBOOT_FDT_OVERLAYS}; do
 	[ -f "${overlay_src}" ] || die "missing overlay: ${overlay_src}"
 	cp -p "${overlay_src}" "${esp_mnt}/EFI/overlays/${overlay}"
 done
-if [ "${ROOTFS_TYPE}" = "ufs" ]; then
-	umount "${root_mnt}"
-	root_mnt=
-fi
-
 printf 'fdt_overlays=%s\n' "${UBOOT_FDT_OVERLAYS}" \
     > "${esp_mnt}/EFI/overlays.conf"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/BOOT/BOOTAA64.EFI"
 cp -p "${loader_tmp}" "${esp_mnt}/EFI/FreeBSD/loader.efi"
 cp -p "${FREEBSD_DTB}" "${esp_mnt}${FREEBSD_DTB_ESP_PATH}"
+entry_tool="${root_mnt}/usr/local/sbin/rk3588-uboot-tools"
+entry_template="${root_mnt}/usr/local/share/rk3588-uboot-tools/uboot-boot-entry.conf"
+[ -x "${entry_tool}" ] && [ -f "${entry_template}" ] ||
+    die "installed system is missing rk3588-uboot-tools boot entry"
+"${entry_tool}" -e "${esp_mnt}" entry install "${entry_template}"
+if [ "${ROOTFS_TYPE}" = "ufs" ]; then
+	umount "${root_mnt}"
+	root_mnt=
+fi
 sync
 umount "${esp_mnt}"
 esp_mnt=
