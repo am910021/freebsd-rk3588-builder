@@ -25,6 +25,7 @@ LOGO_BMP=${LOGO_BMP:-${IMAGE_LOGO_BMP}}
 ROOTFS_TYPE=${ROOTFS_TYPE:-ufs}
 INSTALLER=${INSTALLER:-NO}
 INSTALL_TARGET_ROOT_LABEL=${ROOT_LABEL}
+INSTALL_TARGET_ESP_MIB=${ESP_SIZE_MIB}
 ROOTFS_SUFFIX=
 if [ "${ROOTFS_TYPE}" = "zfs" ]; then
 	ROOTFS_SUFFIX=-zfs
@@ -37,10 +38,9 @@ YES)
 		exit 1
 	    }
 	SWAP_SIZE_MIB=0
+	ESP_SIZE_MIB=${INSTALLER_ESP_SIZE_MIB}
+	IMAGE_TAIL_MIB=1
 	ROOT_LABEL=${ROOT_LABEL}_installer
-	if [ "${ROOT_SIZE_MIB}" -lt 1536 ]; then
-		ROOT_SIZE_MIB=1536
-	fi
 	ROOTFS_SUFFIX=${ROOTFS_SUFFIX}-installer
 	;;
 NO) ;;
@@ -182,10 +182,26 @@ add_board_package()
 # Output example: ESP_START=32768 ROOT_PARTITION=4 and md=""
 configure_image_layout()
 {
-	# Validate the two required FreeBSD release archives first.
+	case "${ESP_SIZE_MIB}" in
+		''|*[!0-9]*) die "ESP size must be a whole number of MiB" ;;
+	esac
+	if [ "${INSTALLER}" = "YES" ]; then
+		[ "${ESP_SIZE_MIB}" -ge 4 ] ||
+		    die "installer live ESP must be at least 4 MiB to hold the EFI loader, DTB and boot entry"
+	else
+		[ "${ESP_SIZE_MIB}" -ge 16 ] ||
+		    die "non-installer ESP must be at least 16 MiB"
+	fi
+	[ "${ESP_SIZE_MIB}" -le 1024 ] ||
+	    die "ESP size must not exceed 1024 MiB"
+	# Full archives remain the installer payload; only the live root is reduced.
 for file in "${BASE_TXZ}" "${KERNEL_TXZ}"; do
 	[ -f "${file}" ] || die "missing input: ${file}"
 done
+if [ "${INSTALLER}" = "YES" ]; then
+	[ -f "${BASE_LIVE_TXZ}" ] ||
+	    die "missing live-system archive: ${BASE_LIVE_TXZ}"
+fi
 
 	# Reject invalid labels, sizes and filesystem selections before changing state.
 [ -n "${ROOT_LABEL}" ] || die "ROOT_LABEL is not configured"
@@ -234,6 +250,7 @@ fi
 
 md=
 root_mnt=
+root_stage=
 esp_mnt=
 AUTO_WORK=0
 }
@@ -327,14 +344,14 @@ fi
 [ ! -e "${OUT}" ] || die "output already exists: ${OUT}"
 
 for cmd in awk mdconfig gpart newfs newfs_msdos mount umount tar chflags \
-    truncate dd mktemp sha256 python3 fsck_msdosfs fsck_ufs pkg; do
+    truncate dd mktemp sha256 python3 fsck_msdosfs fsck_ufs pkg stat df; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
+if [ "${ROOTFS_TYPE}" = "zfs" ] || [ "${INSTALLER}" = "YES" ]; then
+	command -v makefs >/dev/null 2>&1 || die "missing command: makefs"
+fi
 if [ "${ROOTFS_TYPE}" = "zfs" ]; then
-	for cmd in makefs zdb; do
-		command -v "${cmd}" >/dev/null 2>&1 ||
-		    die "missing command: ${cmd}"
-	done
+	command -v zdb >/dev/null 2>&1 || die "missing command: zdb"
 fi
 }
 
@@ -383,7 +400,8 @@ esac
     die "GPT metadata overlaps idbloader at LBA 64"
 FIRMWARE_SECTORS=$((ESP_START - FIRMWARE_START))
 gpart add -b "${FIRMWARE_START}" -s "${FIRMWARE_SECTORS}" \
-    -t freebsd-boot -l rk3588_firmware "${md}"
+    -t "!b88672e6-80ac-46b0-b8b4-627b87f63119" \
+    -l rk3588_firmware "${md}"
 gpart add -b "${ESP_START}" -s "${ESP_SECTORS}" -t efi -l EFI "${md}"
 if [ "${SWAP_SIZE_MIB}" -gt 0 ]; then
 	gpart add -b "${SWAP_START}" -s "${SWAP_SECTORS}" -t freebsd-swap \
@@ -411,11 +429,15 @@ install_root_filesystem()
 {
 	# Create/mount UFS when selected; ZFS is assembled from this directory later.
 echo "== Installing FreeBSD ${FREEBSD_OBJ_VERSION} root filesystem =="
-if [ "${ROOTFS_TYPE}" = "ufs" ]; then
+if [ "${ROOTFS_TYPE}" = "ufs" ] && [ "${INSTALLER}" != "YES" ]; then
 	newfs -U -L "${ROOT_LABEL}" "/dev/${md}p${ROOT_PARTITION}" >/dev/null
 	mount "/dev/${md}p${ROOT_PARTITION}" "${root_mnt}"
 fi
-tar -xpf "${BASE_TXZ}" -C "${root_mnt}"
+live_base_txz=${BASE_TXZ}
+if [ "${INSTALLER}" = "YES" ]; then
+	live_base_txz=${BASE_LIVE_TXZ}
+fi
+tar -xpf "${live_base_txz}" -C "${root_mnt}"
 tar -xpf "${KERNEL_TXZ}" -C "${root_mnt}"
 ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
     add "${pkg_package}"
@@ -480,11 +502,47 @@ if [ "${INSTALLER}" = "YES" ]; then
 	cat > "${payload}/config" <<EOF
 FIRMWARE_MIB=${FIRMWARE_MIB}
 FIRMWARE_UPDATE_BYTES=${firmware_update_bytes}
-ESP_MIB=${ESP_SIZE_MIB}
+ESP_MIB=${INSTALL_TARGET_ESP_MIB}
 ROOT_LABEL=${INSTALL_TARGET_ROOT_LABEL}
 ZFS_POOL_NAME=${ZFS_POOL_NAME}
 EOF
 fi
+}
+
+# Input: populated installer root_mnt, WORK and root/partition sizing globals.
+# Input example: INSTALLER=YES root_mnt=<WORK>/root
+# Output: creates a UFS2 root image sized from its contents with 100 MiB free.
+# Output example: ROOT_SIZE_MIB=640 and <WORK>/root.ufs
+size_installer_root()
+{
+	root_stage=${root_mnt}
+	root_image="${WORK}/root.ufs"
+	# Include extracted archives, installed packages and the offline payload.
+	# Leave a little extra for fstab, rc.conf and provenance written after GPT.
+	makefs -t ffs -o "version=2,softupdates=1,minfree=0,label=${ROOT_LABEL}" \
+	    -b 114m -R 1m "${root_image}" "${root_stage}"
+	root_image_bytes=$(stat -f %z "${root_image}")
+	[ $((root_image_bytes % 1048576)) -eq 0 ] ||
+	    die "installer root image is not MiB-aligned"
+	ROOT_SIZE_MIB=$((root_image_bytes / 1048576))
+	ROOT_END_MIB=$((SWAP_END_MIB + ROOT_SIZE_MIB))
+	IMAGE_SIZE_MIB=$((ROOT_END_MIB + IMAGE_TAIL_MIB))
+	ROOT_SECTORS=$((ROOT_SIZE_MIB * SECTORS_PER_MIB))
+	TOTAL_SECTORS=$((IMAGE_SIZE_MIB * SECTORS_PER_MIB))
+	echo "== Installer UFS root: ${ROOT_SIZE_MIB} MiB (100 MiB free target) =="
+}
+
+# Input: completed root_image and attached md/GPT root partition.
+# Input example: root_image=<WORK>/root.ufs md=md0 ROOT_PARTITION=3
+# Output: writes and mounts the dynamically sized installer root filesystem.
+# Output example: root_mnt=<WORK>/root-mounted
+mount_installer_root()
+{
+	dd if="${root_image}" of="/dev/${md}p${ROOT_PARTITION}" \
+	    bs=1m status=none
+	root_mnt="${WORK}/root-mounted"
+	mkdir -p "${root_mnt}"
+	mount "/dev/${md}p${ROOT_PARTITION}" "${root_mnt}"
 }
 
 # Input: filesystem UUIDs, image settings, board files and populated root_mnt.
@@ -609,6 +667,7 @@ Root partition GUID: ${root_uuid}
 Root filesystem: ${ROOTFS_TYPE}
 Installed ports: ${PORT_ORIGINS}
 Installer payload: ${INSTALLER}
+Live base archive: ${live_base_txz}
 EOF
 for board_package in ${board_registered_packages}; do
 	echo "Board package (registered): ${board_package##*/} $(sha256 -q "${board_package}")" \
@@ -634,6 +693,11 @@ finalize_root_filesystem()
 sync
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
 	df -h "${root_mnt}"
+	if [ "${INSTALLER}" = "YES" ]; then
+		available_kib=$(df -kP "${root_mnt}" | awk 'END { print $4 }')
+		[ "${available_kib}" -ge 102400 ] ||
+		    die "installer root has less than 100 MiB free: ${available_kib} KiB"
+	fi
 	umount "${root_mnt}"
 	root_mnt=
 else
@@ -659,7 +723,12 @@ install_esp()
 {
 	# Format and mount the EFI System Partition.
 echo "== Installing ESP =="
-newfs_msdos -L EFI -F 16 "/dev/${md}p${ESP_PARTITION}" >/dev/null
+if [ "${ESP_SIZE_MIB}" -lt 32 ]; then
+	# A small FAT16 ESP needs 512-byte clusters to meet its minimum cluster count.
+	newfs_msdos -L EFI -F 16 -c 1 "/dev/${md}p${ESP_PARTITION}" >/dev/null
+else
+	newfs_msdos -L EFI -F 16 "/dev/${md}p${ESP_PARTITION}" >/dev/null
+fi
 mount -t msdosfs "/dev/${md}p${ESP_PARTITION}" "${esp_mnt}"
 mkdir -p "${esp_mnt}/EFI/BOOT" "${esp_mnt}/EFI/FreeBSD" \
     "${esp_mnt}/EFI/overlays" \
@@ -818,9 +887,17 @@ main()
 	discover_packages
 	validate_inputs_and_tools
 	prepare_workspace
-	create_partitioned_image
-	install_root_filesystem
-	stage_installer_payload
+	if [ "${INSTALLER}" = "YES" ]; then
+		install_root_filesystem
+		stage_installer_payload
+		size_installer_root
+		create_partitioned_image
+		mount_installer_root
+	else
+		create_partitioned_image
+		install_root_filesystem
+		stage_installer_payload
+	fi
 	write_system_configuration
 	write_root_provenance
 	finalize_root_filesystem

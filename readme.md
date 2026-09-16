@@ -98,6 +98,7 @@ export BOARD=nanopc-t6-lts
 # or: export BOARD=g98
 FIRMWARE_MIB=16
 ESP_SIZE_MIB=256
+INSTALLER_ESP_SIZE_MIB=50
 SWAP_SIZE_MIB=512
 ROOT_SIZE_MIB=1024
 IMAGE_TAIL_MIB=96
@@ -387,8 +388,16 @@ Output:
 
 ```text
 output/<FreeBSD version>/base.txz
+output/<FreeBSD version>/base-live.txz
 output/<FreeBSD version>/kernel.txz
 ```
+
+The versioned `base-live-*.txz` is staged from the same world objects with
+`MK_TOOLCHAIN=no MK_TESTS=no MK_DEBUG_FILES=no MK_LIB32=no`
+`MK_INSTALLLIB=no MK_MAN=no MK_DICT=no`. Installer images unpack it
+for the live root, but carry the complete `base-*.txz` in `/usr/freebsd-dist`
+for target-system installation. Non-installer images still unpack the complete
+base archive.
 
 ## Step 4: Build Ports
 
@@ -454,6 +463,15 @@ Both `build-u-boot-2026.07-complete.sh` and the image builder use
   or SATA disk U-Boot's default target at the next startup.
 - `INSTALLER=YES` embeds `base.txz`, `kernel.txz`, firmware, DTB, and the
   offline packages. It does not install the installer package by itself.
+- The installer UFS root is sized from the assembled live system and offline
+  payload, with at least 100 MiB available after image construction; the
+  fixed `ROOT_SIZE_MIB` applies only to non-installer images. Installer images
+  use `INSTALLER_ESP_SIZE_MIB` (50 MiB by default) and a 1 MiB GPT tail.
+  The live-image minimum is 4 MiB; smaller values fail before image creation.
+  Set it at build time, for example `INSTALLER_ESP_SIZE_MIB=64 BOARD=g98
+  INSTALLER=YES ./make-freebsd14-image.sh`. Installed targets still use
+  `ESP_SIZE_MIB` (256 MiB by default). If the user elects to install U-Boot,
+  the installer asks for the target ESP size (default 64 MiB, minimum 48 MiB).
 - `boards/<board>/hooks.sh` selects the hardware packages installed in the
   live image and copied into its installer payload. NanoPC-T6-LTS includes
   if_rge and RTL Bluetooth firmware; G98 includes if_rge and YT921x.
@@ -476,6 +494,11 @@ use `/dev/gptid/<GUID>` for UFS root, ESP, and swap references. Filesystem and
 GPT labels remain descriptive only, so duplicate labels cannot redirect boot.
 
 Default image layout:
+
+Partition 1 uses RK3588 firmware type GUID
+`b88672e6-80ac-46b0-b8b4-627b87f63119`, not `freebsd-boot`.
+`gpart show` displays its raw type (`!GUID`); `gpart show -l` displays
+`rk3588_firmware`. The ESP remains the standard `efi` type.
 
 ```text
 0-16 MiB       GPT metadata and p1 rk3588_firmware

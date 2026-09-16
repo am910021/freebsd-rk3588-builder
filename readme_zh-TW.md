@@ -97,6 +97,7 @@ export BOARD=nanopc-t6-lts
 # 或：export BOARD=g98
 FIRMWARE_MIB=16
 ESP_SIZE_MIB=256
+INSTALLER_ESP_SIZE_MIB=50
 SWAP_SIZE_MIB=512
 ROOT_SIZE_MIB=1024
 IMAGE_TAIL_MIB=96
@@ -369,8 +370,15 @@ NO_CLEAN=YES ./build-freebsd-release.sh
 
 ```text
 output/<FreeBSD 版本>/base.txz
+output/<FreeBSD 版本>/base-live.txz
 output/<FreeBSD 版本>/kernel.txz
 ```
+
+有版本資訊的 `base-live-*.txz` 會沿用同一份 world objects，以
+`MK_TOOLCHAIN=no MK_TESTS=no MK_DEBUG_FILES=no MK_LIB32=no`
+`MK_INSTALLLIB=no MK_MAN=no MK_DICT=no` 隔離安裝後打包。
+installer image 的 live root 使用此精簡檔，但 `/usr/freebsd-dist` 仍保留
+完整的 `base-*.txz` 供安裝目標系統使用。非 installer image 繼續使用完整 base。
 
 ## 步驟 4：建立 Ports
 
@@ -435,6 +443,14 @@ firmware。
   預設目標。
 - `INSTALLER=YES` 只負責放入 `base.txz`、`kernel.txz`、firmware、DTB
   與離線 packages，不會自行安裝 installer package。
+- installer 的 UFS root 依組裝完成的 live 系統與離線 payload 動態決定容量，
+  image 完成後至少保留 100 MiB 可用空間；固定的 `ROOT_SIZE_MIB` 僅用於
+  非 installer image。installer image 的 ESP 使用 `INSTALLER_ESP_SIZE_MIB`
+  （預設 50 MiB，最小 4 MiB），並保留 1 MiB GPT 尾端；小於 4 MiB 會在
+  建置 image 前直接報錯。建置時可用
+  `INSTALLER_ESP_SIZE_MIB=64 BOARD=g98 INSTALLER=YES ./make-freebsd14-image.sh`
+  調整；安裝目標起初使用 `ESP_SIZE_MIB`（預設 256 MiB）。若使用者選擇安裝
+  U-Boot，installer 會詢問目標 ESP 容量（預設 64 MiB、最小 48 MiB）。
 - `boards/<board>/hooks.sh` 決定安裝至 live image 及複製到 installer payload
   的硬體 package。NanoPC-T6-LTS 包含 if_rge 與 RTL 藍牙 firmware；G98
   包含 if_rge 與 YT921x。
@@ -454,6 +470,11 @@ image builder 與 `rk3588-install` 會產生新的 GPT partition GUID，並以
 只保留作辨識，不再因同名 label 導向錯誤磁碟。
 
 預設 image layout：
+
+第 1 分割區使用 RK3588 firmware 專屬 type GUID
+`b88672e6-80ac-46b0-b8b4-627b87f63119`，不再用 `freebsd-boot`。
+`gpart show` 會顯示其原始 type（`!GUID`），`gpart show -l` 則顯示
+`rk3588_firmware`；ESP 仍使用標準 `efi` type。
 
 ```text
 0-16 MiB       GPT metadata 與 p1 rk3588_firmware

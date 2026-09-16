@@ -61,7 +61,7 @@ validate_environment()
 		die "cannot determine FreeBSD source commit"
 
 	# Check every host command used below before starting a long build.
-	for cmd in cp git make sha256; do
+	for cmd in chflags chmod cp git make mktemp mv sha256 tar; do
 		command -v "${cmd}" >/dev/null 2>&1 ||
 			die "missing command: ${cmd}"
 	done
@@ -138,6 +138,37 @@ package_release_archives()
 	cp -p "${release_obj}/kernel.txz" "${KERNEL_TXZ}"
 }
 
+# package_live_archive
+# Input: the completed world objects and global BASE_LIVE_TXZ/WORK_ROOT paths.
+# Input example: BASE_LIVE_TXZ=output/14.3-p16/base-live-14.3-p16_<commit>.txz
+# Output: stages an installer-only world and publishes its compressed archive.
+# Output example: ${BASE_LIVE_TXZ}, without changing the full base.txz.
+package_live_archive()
+{
+	echo "== Packaging reduced live-system archive =="
+	mkdir -p "${WORK_ROOT}/tmp"
+	live_stage=$(mktemp -d "${WORK_ROOT}/tmp/base-live.XXXXXXXX")
+	live_archive=$(mktemp "${BASE_LIVE_TXZ}.tmp.XXXXXXXX")
+	trap 'chflags -R 0 "${live_stage}" 2>/dev/null || true; rm -rf -- "${live_stage}"; rm -f -- "${live_archive}"' EXIT HUP INT TERM
+
+	# The same full buildworld objects supply the reduced installworld.
+	freebsd_make DESTDIR="${live_stage}" -DDB_FROM_SRC \
+	    MK_TOOLCHAIN=no MK_TESTS=no MK_DEBUG_FILES=no \
+	    MK_LIB32=no MK_INSTALLLIB=no MK_MAN=no MK_DICT=no \
+	    installworld distribution
+	[ -x "${live_stage}/bin/sh" ] ||
+		die "live stage did not install /bin/sh"
+	[ -f "${live_stage}/etc/master.passwd" ] ||
+		die "live stage did not install /etc/master.passwd"
+	tar -cJpf "${live_archive}" -C "${live_stage}" .
+	chmod 644 "${live_archive}"
+	mv -f -- "${live_archive}" "${BASE_LIVE_TXZ}"
+	# installworld marks select files immutable on FreeBSD hosts.
+	chflags -R 0 "${live_stage}"
+	rm -rf -- "${live_stage}"
+	trap - EXIT HUP INT TERM
+}
+
 # report_outputs
 # Input: global BASE_TXZ, KERNEL_TXZ, FREEBSD_OBJ and TXZ_ROOT.
 # Input example: TXZ_ROOT=/root/freebsd-rk3588-builder/work/txz/14.3-p16
@@ -145,7 +176,7 @@ package_release_archives()
 # Output example: SHA-256 lines followed by "Release packages: <TXZ_ROOT>"
 report_outputs()
 {
-	sha256 "${BASE_TXZ}" "${KERNEL_TXZ}"
+	sha256 "${BASE_TXZ}" "${BASE_LIVE_TXZ}" "${KERNEL_TXZ}"
 	echo "FreeBSD objects: ${FREEBSD_OBJ}"
 	echo "Release packages: ${TXZ_ROOT}"
 }
@@ -162,6 +193,7 @@ main()
 	validate_environment
 	build_world_and_kernel
 	package_release_archives
+	package_live_archive
 	report_outputs
 }
 
