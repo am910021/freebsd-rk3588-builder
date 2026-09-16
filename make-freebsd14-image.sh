@@ -149,9 +149,9 @@ select_single_package()
 	    die "no ${package_label} package found in ${package_directory}; run BOARD=${BOARD} ./build-ports.sh"
 }
 
-# add_board_package MODE OVERRIDE GLOB
-# Input: mode "$1", optional exact path "$2" and board-relative glob "$3".
-# Input example: add_board_package non-registered '' 'board-driver-*.pkg'
+# add_board_package MODE OVERRIDE GLOB [DIRECTORY]
+# Input: mode "$1", optional exact path "$2", glob "$3", optional directory "$4".
+# Input example: add_board_package non-registered '' 'board-driver-*.pkg' "$PORTS_OUTPUT_DIR"
 # Output: appends one resolved package path to the selected board package list.
 # Output example: board_nonregistered_packages=".../board-driver-1.0.pkg"
 add_board_package()
@@ -159,7 +159,8 @@ add_board_package()
 	package_mode=$1
 	package_override=$2
 	package_glob=$3
-	select_single_package "${BOARD_PORTS_OUTPUT_DIR}" \
+	package_directory=${4:-${BOARD_PORTS_OUTPUT_DIR}}
+	select_single_package "${package_directory}" \
 	    "${package_override}" "${package_glob}" "${package_glob}"
 	case "${selected_package}" in
 	*[[:space:]]*) die "package path contains whitespace: ${selected_package}" ;;

@@ -11,13 +11,13 @@ board_ports_publish_extra_packages()
 }
 
 # board_image_add_packages
-# Input: BOARD_PORTS_OUTPUT_DIR and optional BOARD_PACKAGE_OVERRIDE.
+# Input: PORTS_OUTPUT_DIR, BOARD_PORTS_OUTPUT_DIR and optional BOARD_PACKAGE_OVERRIDE.
 # Input example: BOARD_PACKAGE_OVERRIDE=/tmp/realtek-rge-kmod.pkg
 # Output: registers NanoPC if_rge and RTL Bluetooth packages with the builder.
 # Output example: one non-registered and one registered board package
 board_image_add_packages()
 {
 	add_board_package non-registered "${BOARD_PACKAGE_OVERRIDE:-}" \
-	    'realtek-rge-kmod-*.pkg'
+	    'realtek-rge-kmod-*.pkg' "${PORTS_OUTPUT_DIR}"
 	add_board_package registered '' 'rtlbt-firmware-*.pkg'
 }

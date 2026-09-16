@@ -177,7 +177,7 @@ A complete image requires:
 ```text
 output/14.3-p16/sets/base-14.3-p16_<commit>.txz
 output/14.3-p16/sets/kernel-14.3-p16_<commit>.txz
-output/14.3-p16/ports/nanopc-t6-lts/realtek-rge-kmod-<version>.pkg
+output/14.3-p16/ports/realtek-rge-kmod-<version>.pkg
 output/14.3-p16/uboot-2026.07/16m/nanopc-t6-lts/
 ```
 
@@ -412,7 +412,7 @@ Output:
 output/<FreeBSD version>/ports/pkg-<version>.pkg
 output/<FreeBSD version>/ports/rk3588-installer-<version>.pkg
 output/<FreeBSD version>/ports/rk3588-uboot-tools-<version>.pkg
-output/<FreeBSD version>/ports/nanopc-t6-lts/realtek-rge-kmod-<version>.pkg
+output/<FreeBSD version>/ports/realtek-rge-kmod-<version>.pkg
 output/<FreeBSD version>/ports/nanopc-t6-lts/rtlbt-firmware-<version>.pkg
 output/<FreeBSD version>/ports/g98/realtek-rge-kmod-<version>.pkg
 output/<FreeBSD version>/ports/g98/motorcomm-yt921x-kmod-<version>.pkg
@@ -422,7 +422,8 @@ Each package also has an adjacent `.pkg.sha256` file. Run `build-ports.sh`
 once per board: `BOARD=g98 ./build-ports.sh` and
 `BOARD=nanopc-t6-lts ./build-ports.sh`. Shared packages are published to
 `ports/`; board-specific packages are kept separate even when they have the
-same name and version. `build-ports.sh` builds the local `pkg`, driver, and
+same name and version. NanoPC uses the shared Realtek package; G98 uses its
+board-patched package. `build-ports.sh` builds the local `pkg`, driver, and
 installer ports. Board hooks add other runtime packages: NanoPC-T6-LTS fetches the
 architecture-neutral `rtlbt-firmware` package from the configured official
 FreeBSD pkg repository; G98 does not fetch or package Bluetooth firmware.

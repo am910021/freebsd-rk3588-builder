@@ -171,7 +171,7 @@ untracked 檔案與 ignored 檔案都會直接刪除且不備份。`BOARD` 只�
 ```text
 output/14.3-p16/sets/base-14.3-p16_<commit>.txz
 output/14.3-p16/sets/kernel-14.3-p16_<commit>.txz
-output/14.3-p16/ports/nanopc-t6-lts/realtek-rge-kmod-<版本>.pkg
+output/14.3-p16/ports/realtek-rge-kmod-<版本>.pkg
 output/14.3-p16/uboot-2026.07/16m/nanopc-t6-lts/
 ```
 
@@ -392,7 +392,7 @@ installer image 的 live root 使用此精簡檔，但 `/usr/freebsd-dist` 仍�
 output/<FreeBSD 版本>/ports/pkg-<版本>.pkg
 output/<FreeBSD 版本>/ports/rk3588-installer-<版本>.pkg
 output/<FreeBSD 版本>/ports/rk3588-uboot-tools-<版本>.pkg
-output/<FreeBSD 版本>/ports/nanopc-t6-lts/realtek-rge-kmod-<版本>.pkg
+output/<FreeBSD 版本>/ports/realtek-rge-kmod-<版本>.pkg
 output/<FreeBSD 版本>/ports/nanopc-t6-lts/rtlbt-firmware-<版本>.pkg
 output/<FreeBSD 版本>/ports/g98/realtek-rge-kmod-<版本>.pkg
 output/<FreeBSD 版本>/ports/g98/motorcomm-yt921x-kmod-<版本>.pkg
@@ -400,7 +400,8 @@ output/<FreeBSD 版本>/ports/g98/motorcomm-yt921x-kmod-<版本>.pkg
 
 每個 package 旁也有對應的 `.pkg.sha256`。兩板需分別執行
 `BOARD=g98 ./build-ports.sh` 與 `BOARD=nanopc-t6-lts ./build-ports.sh`。
-共用套件放在 `ports/`；板級套件即使同名同版本也各自保留。
+共用套件放在 `ports/`；板級套件即使同名同版本也各自保留。NanoPC
+使用共用版 Realtek 套件，G98 則使用帶板級 patch 的版本。
 `build-ports.sh` 會建立本地 `pkg`、driver 與 installer ports。其他 runtime
 package 由 board hook 加入：NanoPC-T6-LTS 會從已設定的 FreeBSD 官方 pkg
 repository 擷取架構無關的 `rtlbt-firmware`；G98 不會取得或攜帶藍牙
