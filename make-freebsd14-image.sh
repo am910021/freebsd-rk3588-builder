@@ -121,16 +121,17 @@ partition_uuid()
 	'
 }
 
-# select_single_package OVERRIDE GLOB LABEL
-# Input: optional exact path "$1", TXZ_ROOT-relative glob "$2" and label "$3".
-# Input example: select_single_package '' 'board-driver-*.pkg' board-driver
+# select_single_package DIRECTORY OVERRIDE GLOB LABEL
+# Input: search directory "$1", optional exact path "$2", glob "$3" and label "$4".
+# Input example: select_single_package "$BOARD_PORTS_OUTPUT_DIR" '' 'board-driver-*.pkg' board-driver
 # Output: sets selected_package to exactly one regular package or exits.
-# Output example: selected_package=/output/14.3-p16/board-driver-1.0.pkg
+# Output example: selected_package=/output/14.3-p16/ports/g98/board-driver-1.0.pkg
 select_single_package()
 {
-	package_override=$1
-	package_glob=$2
-	package_label=$3
+	package_directory=$1
+	package_override=$2
+	package_glob=$3
+	package_label=$4
 	selected_package=
 	if [ -n "${package_override}" ]; then
 		[ -f "${package_override}" ] ||
@@ -138,18 +139,18 @@ select_single_package()
 		selected_package=${package_override}
 		return
 	fi
-	for package_candidate in "${TXZ_ROOT}"/${package_glob}; do
+	for package_candidate in "${package_directory}"/${package_glob}; do
 		[ -f "${package_candidate}" ] || continue
 		[ -z "${selected_package}" ] ||
-		    die "multiple ${package_label} packages in ${TXZ_ROOT}"
+		    die "multiple ${package_label} packages in ${package_directory}"
 		selected_package=${package_candidate}
 	done
 	[ -n "${selected_package}" ] ||
-	    die "no ${package_label} package found in ${TXZ_ROOT}"
+	    die "no ${package_label} package found in ${package_directory}; run BOARD=${BOARD} ./build-ports.sh"
 }
 
 # add_board_package MODE OVERRIDE GLOB
-# Input: mode "$1", optional exact path "$2" and TXZ_ROOT-relative glob "$3".
+# Input: mode "$1", optional exact path "$2" and board-relative glob "$3".
 # Input example: add_board_package non-registered '' 'board-driver-*.pkg'
 # Output: appends one resolved package path to the selected board package list.
 # Output example: board_nonregistered_packages=".../board-driver-1.0.pkg"
@@ -158,8 +159,8 @@ add_board_package()
 	package_mode=$1
 	package_override=$2
 	package_glob=$3
-	select_single_package "${package_override}" "${package_glob}" \
-	    "${package_glob}"
+	select_single_package "${BOARD_PORTS_OUTPUT_DIR}" \
+	    "${package_override}" "${package_glob}" "${package_glob}"
 	case "${selected_package}" in
 	*[[:space:]]*) die "package path contains whitespace: ${selected_package}" ;;
 	esac
@@ -255,45 +256,28 @@ esp_mnt=
 AUTO_WORK=0
 }
 
-# Input: TXZ_ROOT, PORT_ORIGINS and board hooks from configuration.
-# Input example: TXZ_ROOT=output/14.3-p16 PORT_ORIGINS="ports-mgmt/pkg ..."
+# Input: Ports output directories, PORT_ORIGINS and board hooks from configuration.
+# Input example: PORTS_OUTPUT_DIR=output/14.3-p16/ports
 # Output: selects exactly one package for each required or configured component.
-# Output example: pkg_package=<TXZ_ROOT>/pkg-2.1.2.pkg
+# Output example: pkg_package=<PORTS_OUTPUT_DIR>/pkg-2.1.2.pkg
 discover_packages()
 {
 	# Select the bootstrap pkg package.
-pkg_package=
-for candidate in "${TXZ_ROOT}"/pkg-*.pkg; do
-	[ -f "${candidate}" ] || continue
-	[ -z "${pkg_package}" ] ||
-	    die "multiple pkg packages in ${TXZ_ROOT}"
-	pkg_package=${candidate}
-done
-[ -n "${pkg_package}" ] || die "no pkg package found in ${TXZ_ROOT}"
+select_single_package "${PORTS_OUTPUT_DIR}" '' 'pkg-*.pkg' pkg
+pkg_package=${selected_package}
 
 installer_pkg=
 case " ${PORT_ORIGINS} " in
 *" sysutils/rk3588-installer "*)
-	for candidate in "${TXZ_ROOT}"/rk3588-installer-*.pkg; do
-		[ -f "${candidate}" ] || continue
-		[ -z "${installer_pkg}" ] ||
-		    die "multiple rk3588-installer packages in ${TXZ_ROOT}"
-		installer_pkg=${candidate}
-	done
-	[ -n "${installer_pkg}" ] ||
-	    die "no rk3588-installer package found in ${TXZ_ROOT}"
+	select_single_package "${PORTS_OUTPUT_DIR}" '' \
+	    'rk3588-installer-*.pkg' rk3588-installer
+	installer_pkg=${selected_package}
 	;;
 esac
 
-uboot_tools_pkg=
-for candidate in "${TXZ_ROOT}"/rk3588-uboot-tools-*.pkg; do
-	[ -f "${candidate}" ] || continue
-	[ -z "${uboot_tools_pkg}" ] ||
-	    die "multiple rk3588-uboot-tools packages in ${TXZ_ROOT}"
-	uboot_tools_pkg=${candidate}
-done
-[ -n "${uboot_tools_pkg}" ] ||
-    die "no rk3588-uboot-tools package found in ${TXZ_ROOT}"
+select_single_package "${PORTS_OUTPUT_DIR}" '' \
+    'rk3588-uboot-tools-*.pkg' rk3588-uboot-tools
+uboot_tools_pkg=${selected_package}
 
 run_board_hook board_image_add_packages
 }

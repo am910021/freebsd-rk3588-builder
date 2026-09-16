@@ -538,7 +538,7 @@ write_checksums()
 }
 
 # publish_bundle
-# Input: staged OUT plus FINAL_OUT, WORK_ROOT and VERSION_OUTPUT_ROOT globals.
+# Input: staged OUT plus FINAL_OUT, WORK_ROOT and UBOOT_OUTPUT_DIR globals.
 # Input example: FINAL_OUT=<WORK_ROOT>/g98-uboot-2026.07-16m
 # Output: atomically publishes copies, refreshes latest links and sets OUT/PUBLISH_OUT.
 # Output example: <WORK_ROOT>/g98-uboot-latest -> <OUT>
@@ -559,15 +559,15 @@ publish_bundle()
 	ln -sfn "${OUT}" "${WORK_ROOT}/uboot-latest"
 
 	# Copy the bundle through a staging directory before publishing it.
-	mkdir -p "${VERSION_OUTPUT_ROOT}"
-	PUBLISH_OUT=${VERSION_OUTPUT_ROOT}/${FINAL_OUT##*/}
-	PUBLISH_STAGING=$(mktemp -d "${VERSION_OUTPUT_ROOT}/.${FINAL_OUT##*/}.XXXXXX")
+	mkdir -p "$(dirname "${UBOOT_OUTPUT_DIR}")"
+	PUBLISH_OUT=${UBOOT_OUTPUT_DIR}
+	PUBLISH_STAGING=$(mktemp -d "${UBOOT_OUTPUT_DIR}.XXXXXX")
 	(cd "${OUT}" && tar -cpf - .) |
 	    (cd "${PUBLISH_STAGING}" && tar -xpf -)
 	if [ -e "${PUBLISH_OUT}" ]; then
 		mkdir -p "${HOME}/ready-to-delete"
 		mv "${PUBLISH_OUT}" \
-		    "${HOME}/ready-to-delete/output-${PUBLISH_OUT##*/}-$(date +%Y%m%d-%H%M%S)-$$"
+		    "${HOME}/ready-to-delete/uboot-${UBOOT_VERSION}-${FIRMWARE_MIB}m-${BOARD}-$(date +%Y%m%d-%H%M%S)-$$"
 	fi
 	mv "${PUBLISH_STAGING}" "${PUBLISH_OUT}"
 	PUBLISH_STAGING=
@@ -596,7 +596,7 @@ report_outputs()
 # Input: no command-line arguments; configuration comes from the environment/files.
 # Input example: BOARD=g98 ./build-u-boot-2026.07-complete.sh
 # Output: builds and publishes a complete, checksummed MMC/SPI U-Boot bundle.
-# Output example: output/14.3-p16/g98-uboot-2026.07-16m/
+# Output example: output/14.3-p16/uboot-2026.07/16m/g98/
 main()
 {
 	load_configuration

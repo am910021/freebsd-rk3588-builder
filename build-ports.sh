@@ -67,7 +67,7 @@ validate_environment()
 }
 
 # prepare_workspace
-# Input: global WORK_ROOT, BUILDER_ROOT and TXZ_ROOT.
+# Input: global WORK_ROOT, BUILDER_ROOT and Ports output directories.
 # Input example: WORK_ROOT=/root/freebsd-rk3588-builder/work
 # Output: archives an old ports work tree and sets global ports_work.
 # Output example: ports_work=/root/freebsd-rk3588-builder/work/ports
@@ -81,7 +81,7 @@ prepare_workspace()
 	fi
 
 	# Create clean work and package output roots for this run.
-	mkdir -p "${ports_work}" "${TXZ_ROOT}"
+	mkdir -p "${ports_work}" "${PORTS_OUTPUT_DIR}"
 }
 
 # collect_board_patches ORIGIN
@@ -165,12 +165,21 @@ archive_package()
 # publish_port_packages ORIGIN PORT_WORK
 # Input: expected origin "$1", Port work directory "$2", plus target ABI globals.
 # Input example: publish_port_packages net/realtek-rge-kmod /work/ports/net_realtek-rge-kmod
-# Output: validates and copies packages plus SHA-256 files into TXZ_ROOT.
-# Output example: Package: /work/txz/realtek-rge-kmod-<version>.pkg
+# Output: validates and copies packages plus SHA-256 files into shared or board output.
+# Output example: Package: /output/14.3-p16/ports/g98/realtek-rge-kmod-<version>.pkg
 publish_port_packages()
 {
 	origin=$1
 	port_work=$2
+	case " ${PORTS_SHARED_ORIGINS} " in
+	*" ${origin} "*) package_output_dir=${PORTS_OUTPUT_DIR} ;;
+	*)
+		[ -n "${BOARD}" ] ||
+		    die "BOARD is required for board-specific Port: ${origin}"
+		package_output_dir=${BOARD_PORTS_OUTPUT_DIR}
+		;;
+	esac
+	mkdir -p "${package_output_dir}"
 	found=0
 	for package in "${port_work}"/pkg/*.pkg; do
 		[ -f "${package}" ] || continue
@@ -189,8 +198,8 @@ publish_port_packages()
 		esac
 
 		# Retire an older package with the same package name.
-		output_package=${TXZ_ROOT}/${package##*/}
-		for existing in "${TXZ_ROOT}"/*.pkg; do
+		output_package=${package_output_dir}/${package##*/}
+		for existing in "${package_output_dir}"/*.pkg; do
 			[ -f "${existing}" ] || continue
 			existing_name=$(pkg query -F "${existing}" '%n' 2>/dev/null ||
 			    true)
@@ -210,7 +219,7 @@ publish_port_packages()
 # Input: Port origin in "$1" plus source, board and work globals.
 # Input example: build_port sysutils/rk3588-installer
 # Output: builds, validates and publishes every package from the Port.
-# Output example: one or more .pkg and .pkg.sha256 files in TXZ_ROOT
+# Output example: one or more .pkg and .pkg.sha256 files in ports/<board>/
 build_port()
 {
 	origin=$1
@@ -231,7 +240,7 @@ build_port()
 # Input: space-separated global PORT_ORIGINS.
 # Input example: PORT_ORIGINS="ports-mgmt/pkg net/realtek-rge-kmod"
 # Output: builds and publishes each configured origin in order.
-# Output example: packages for every origin under TXZ_ROOT
+# Output example: shared packages in ports/ and board packages in ports/<board>/
 build_configured_ports()
 {
 	for origin in ${PORT_ORIGINS}; do
@@ -242,10 +251,11 @@ build_configured_ports()
 # fetch_runtime_package NAME ORIGIN
 # Input: package name "$1", expected origin "$2" and target/output globals.
 # Input example: fetch_runtime_package rtlbt-firmware comms/rtlbt-firmware
-# Output: fetches and publishes one architecture-independent runtime package.
-# Output example: /work/txz/rtlbt-firmware-20251111.pkg
+# Output: fetches and publishes one board-specific runtime package.
+# Output example: /output/14.3-p16/ports/nanopc-t6-lts/rtlbt-firmware-20251111.pkg
 fetch_runtime_package()
 {
+	[ -n "${BOARD}" ] || die "BOARD is required for runtime package"
 	runtime_name=$1
 	runtime_origin=$2
 	runtime_fetch=${ports_work}/${runtime_name}-fetch
@@ -264,13 +274,14 @@ fetch_runtime_package()
 		die "unexpected ${runtime_name} origin: ${pkg_origin}"
 	[ "${pkg_abi}" = "FreeBSD:${FREEBSD_OBJ_VERSION%%.*}:*" ] ||
 		die "unexpected ${runtime_name} ABI: ${pkg_abi}"
-	for existing in "${TXZ_ROOT}"/${runtime_name}-*.pkg; do
+	mkdir -p "${BOARD_PORTS_OUTPUT_DIR}"
+	for existing in "${BOARD_PORTS_OUTPUT_DIR}"/${runtime_name}-*.pkg; do
 		[ -f "${existing}" ] || continue
 		archive_package "${existing}"
 	done
 
 	# Publish the fetched package and checksum under its original filename.
-	output_package=${TXZ_ROOT}/${package##*/}
+	output_package=${BOARD_PORTS_OUTPUT_DIR}/${package##*/}
 	cp -p "${package}" "${output_package}"
 	sha256 "${output_package}" > "${output_package}.sha256"
 	echo "Package: ${output_package}"

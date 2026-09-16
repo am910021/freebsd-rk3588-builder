@@ -169,10 +169,10 @@ untracked 檔案與 ignored 檔案都會直接刪除且不備份。`BOARD` 只�
 建立完整 image 前需要：
 
 ```text
-output/14.3-p16/base.txz
-output/14.3-p16/kernel.txz
-output/14.3-p16/realtek-rge-kmod-20260728.pkg
-output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
+output/14.3-p16/sets/base-14.3-p16_<commit>.txz
+output/14.3-p16/sets/kernel-14.3-p16_<commit>.txz
+output/14.3-p16/ports/nanopc-t6-lts/realtek-rge-kmod-<版本>.pkg
+output/14.3-p16/uboot-2026.07/16m/nanopc-t6-lts/
 ```
 
 `base.txz` 與 `kernel.txz` 由目前的 FreeBSD arm64 release build 產生。
@@ -216,7 +216,7 @@ FIRMWARE_MIB=32
 輸出：
 
 ```text
-output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
+output/14.3-p16/uboot-2026.07/16m/nanopc-t6-lts/
 ├── idbloader.img
 ├── u-boot.itb
 ├── uboot-control.dtb
@@ -234,8 +234,8 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 ```
 
 同一份 bundle 仍會保留在 `work/nanopc-t6-lts-uboot-2026.07-16m/`。
-`work/<board>-uboot-latest` 會指向該板型最新完成的 bundle，image builder
-預設使用這個板型專屬 link。相容用的 `work/uboot-latest` 仍會指向所有板型中
+`work/<board>-uboot-latest` 會指向該板型最新完成的 bundle；image builder
+改從 `output/` 下對應板型與容量的目錄讀取。相容用的 `work/uboot-latest` 仍會指向所有板型中
 最後完成的 bundle；不可用它選取其他板型的 artifact。
 
 每個板型 bundle 都會同時產生兩份供外部完整燒錄的映像：eMMC/SD 使用
@@ -369,9 +369,9 @@ NO_CLEAN=YES ./build-freebsd-release.sh
 輸出：
 
 ```text
-output/<FreeBSD 版本>/base.txz
-output/<FreeBSD 版本>/base-live.txz
-output/<FreeBSD 版本>/kernel.txz
+output/<FreeBSD 版本>/sets/base-<版本>_<commit>.txz
+output/<FreeBSD 版本>/sets/base-live-<版本>_<commit>.txz
+output/<FreeBSD 版本>/sets/kernel-<版本>_<commit>.txz
 ```
 
 有版本資訊的 `base-live-*.txz` 會沿用同一份 world objects，以
@@ -389,18 +389,18 @@ installer image 的 live root 使用此精簡檔，但 `/usr/freebsd-dist` 仍�
 輸出：
 
 ```text
-output/<FreeBSD 版本>/realtek-rge-kmod-<版本>.pkg
-output/<FreeBSD 版本>/realtek-rge-kmod-<版本>.pkg.sha256
-output/<FreeBSD 版本>/pkg-<版本>.pkg
-output/<FreeBSD 版本>/pkg-<版本>.pkg.sha256
-output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg
-output/<FreeBSD 版本>/rk3588-installer-<版本>.pkg.sha256
-output/<FreeBSD 版本>/rk3588-uboot-tools-<版本>.pkg
-output/<FreeBSD 版本>/rk3588-uboot-tools-<版本>.pkg.sha256
-output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg
-output/<FreeBSD 版本>/rtlbt-firmware-<版本>.pkg.sha256
+output/<FreeBSD 版本>/ports/pkg-<版本>.pkg
+output/<FreeBSD 版本>/ports/rk3588-installer-<版本>.pkg
+output/<FreeBSD 版本>/ports/rk3588-uboot-tools-<版本>.pkg
+output/<FreeBSD 版本>/ports/nanopc-t6-lts/realtek-rge-kmod-<版本>.pkg
+output/<FreeBSD 版本>/ports/nanopc-t6-lts/rtlbt-firmware-<版本>.pkg
+output/<FreeBSD 版本>/ports/g98/realtek-rge-kmod-<版本>.pkg
+output/<FreeBSD 版本>/ports/g98/motorcomm-yt921x-kmod-<版本>.pkg
 ```
 
+每個 package 旁也有對應的 `.pkg.sha256`。兩板需分別執行
+`BOARD=g98 ./build-ports.sh` 與 `BOARD=nanopc-t6-lts ./build-ports.sh`。
+共用套件放在 `ports/`；板級套件即使同名同版本也各自保留。
 `build-ports.sh` 會建立本地 `pkg`、driver 與 installer ports。其他 runtime
 package 由 board hook 加入：NanoPC-T6-LTS 會從已設定的 FreeBSD 官方 pkg
 repository 擷取架構無關的 `rtlbt-firmware`；G98 不會取得或攜帶藍牙
@@ -417,15 +417,9 @@ firmware。
 ./make-freebsd14-image.sh
 ```
 
-或明確指定 txz 與輸出檔：
-
-```sh
-./make-freebsd14-image.sh \
-    output/14.3-p16/base.txz \
-    output/14.3-p16/kernel.txz \
-    output/14.3-p16/realtek-rge-kmod-20260728.pkg \
-    output/14.3-p16/nanopc-t6-lts-freebsd14.3.img
-```
+也可透過位置參數明確指定 `base.txz`、`kernel.txz`、板級 driver package 與
+輸出 image。預設從 `sets/`、`ports/<board>/`、
+`uboot-<版本>/<容量>/<board>/` 讀取，並寫入 `images/`。
 
 `build-u-boot-2026.07-complete.sh` 與 image builder 都使用
 `builder.conf` 的 `FIRMWARE_MIB`，不需分別傳入。
@@ -524,7 +518,7 @@ Image 內會安裝：
 寫入前必須再次確認目標裝置名稱；這個動作會覆蓋整個裝置：
 
 ```sh
-dd if=output/<FreeBSD 版本>/<image>.img of=/dev/daX bs=1m conv=sync status=progress
+dd if=output/<FreeBSD 版本>/images/<image>.img of=/dev/daX bs=1m conv=sync status=progress
 sync
 ```
 

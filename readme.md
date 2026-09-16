@@ -175,10 +175,10 @@ synchronization of the four source repositories.
 A complete image requires:
 
 ```text
-output/14.3-p16/base.txz
-output/14.3-p16/kernel.txz
-output/14.3-p16/realtek-rge-kmod-20260728.pkg
-output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
+output/14.3-p16/sets/base-14.3-p16_<commit>.txz
+output/14.3-p16/sets/kernel-14.3-p16_<commit>.txz
+output/14.3-p16/ports/nanopc-t6-lts/realtek-rge-kmod-<version>.pkg
+output/14.3-p16/uboot-2026.07/16m/nanopc-t6-lts/
 ```
 
 `base.txz` and `kernel.txz` come from the current FreeBSD arm64 release build.
@@ -224,7 +224,7 @@ FIRMWARE_MIB=32
 Output:
 
 ```text
-output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
+output/14.3-p16/uboot-2026.07/16m/nanopc-t6-lts/
 |-- idbloader.img
 |-- u-boot.itb
 |-- uboot-control.dtb
@@ -243,7 +243,8 @@ output/14.3-p16/nanopc-t6-lts-uboot-2026.07-16m/
 
 The same bundle remains under `work/nanopc-t6-lts-uboot-2026.07-16m/`.
 `work/<board>-uboot-latest` points to that board's most recently completed
-bundle and is the default used by the image builder.  The compatibility link
+bundle. The image builder instead reads the published board/capacity directory
+under `output/`. The compatibility link
 `work/uboot-latest` still points to the most recently completed bundle across
 all boards; do not use it to select artifacts for a different board.
 
@@ -387,9 +388,9 @@ The script uses:
 Output:
 
 ```text
-output/<FreeBSD version>/base.txz
-output/<FreeBSD version>/base-live.txz
-output/<FreeBSD version>/kernel.txz
+output/<FreeBSD version>/sets/base-<version>_<commit>.txz
+output/<FreeBSD version>/sets/base-live-<version>_<commit>.txz
+output/<FreeBSD version>/sets/kernel-<version>_<commit>.txz
 ```
 
 The versioned `base-live-*.txz` is staged from the same world objects with
@@ -408,20 +409,21 @@ base archive.
 Output:
 
 ```text
-output/<FreeBSD version>/realtek-rge-kmod-<version>.pkg
-output/<FreeBSD version>/realtek-rge-kmod-<version>.pkg.sha256
-output/<FreeBSD version>/pkg-<version>.pkg
-output/<FreeBSD version>/pkg-<version>.pkg.sha256
-output/<FreeBSD version>/rk3588-installer-<version>.pkg
-output/<FreeBSD version>/rk3588-installer-<version>.pkg.sha256
-output/<FreeBSD version>/rk3588-uboot-tools-<version>.pkg
-output/<FreeBSD version>/rk3588-uboot-tools-<version>.pkg.sha256
-output/<FreeBSD version>/rtlbt-firmware-<version>.pkg
-output/<FreeBSD version>/rtlbt-firmware-<version>.pkg.sha256
+output/<FreeBSD version>/ports/pkg-<version>.pkg
+output/<FreeBSD version>/ports/rk3588-installer-<version>.pkg
+output/<FreeBSD version>/ports/rk3588-uboot-tools-<version>.pkg
+output/<FreeBSD version>/ports/nanopc-t6-lts/realtek-rge-kmod-<version>.pkg
+output/<FreeBSD version>/ports/nanopc-t6-lts/rtlbt-firmware-<version>.pkg
+output/<FreeBSD version>/ports/g98/realtek-rge-kmod-<version>.pkg
+output/<FreeBSD version>/ports/g98/motorcomm-yt921x-kmod-<version>.pkg
 ```
 
-`build-ports.sh` builds the local `pkg`, driver, and installer ports. Board
-hooks add other runtime packages: NanoPC-T6-LTS fetches the
+Each package also has an adjacent `.pkg.sha256` file. Run `build-ports.sh`
+once per board: `BOARD=g98 ./build-ports.sh` and
+`BOARD=nanopc-t6-lts ./build-ports.sh`. Shared packages are published to
+`ports/`; board-specific packages are kept separate even when they have the
+same name and version. `build-ports.sh` builds the local `pkg`, driver, and
+installer ports. Board hooks add other runtime packages: NanoPC-T6-LTS fetches the
 architecture-neutral `rtlbt-firmware` package from the configured official
 FreeBSD pkg repository; G98 does not fetch or package Bluetooth firmware.
 
@@ -437,15 +439,10 @@ Use the default inputs from `builder.conf`:
 ./make-freebsd14-image.sh
 ```
 
-Or explicitly specify the txz archives and output image:
-
-```sh
-./make-freebsd14-image.sh \
-    output/14.3-p16/base.txz \
-    output/14.3-p16/kernel.txz \
-    output/14.3-p16/realtek-rge-kmod-20260728.pkg \
-    output/14.3-p16/nanopc-t6-lts-freebsd14.3.img
-```
+The optional positional arguments may instead supply exact `base.txz`,
+`kernel.txz`, board driver package and output image paths. The defaults read
+from `sets/`, `ports/<board>/` and `uboot-<version>/<capacity>/<board>/`, then
+write to `images/`.
 
 Both `build-u-boot-2026.07-complete.sh` and the image builder use
 `FIRMWARE_MIB` from `builder.conf`; it does not need to be passed separately.
@@ -549,7 +546,7 @@ Confirm the target device name again before writing. This operation
 overwrites the entire target device:
 
 ```sh
-dd if=output/<FreeBSD version>/<image>.img of=/dev/daX bs=1m conv=sync status=progress
+dd if=output/<FreeBSD version>/images/<image>.img of=/dev/daX bs=1m conv=sync status=progress
 sync
 ```
 
