@@ -603,12 +603,6 @@ zfs_load="YES"
 vfs.root.mountfrom="zfs:${ZFS_POOL_NAME}/ROOT/default"
 EOF
 fi
-# The installer applies loader.conf.board separately to the installed target.
-if [ "${INSTALLER}" = "YES" ]; then
-	cp -p "${root_mnt}/etc/rc.conf" "${payload}/rc.conf.base"
-	sed '/^[[:space:]]*vfs\.root\.mountfrom[[:space:]]*=/d' \
-	    "${root_mnt}/boot/loader.conf" > "${payload}/loader.conf.base"
-fi
 if [ -f "${BOARD_DIR}/loader.conf" ]; then
 	cat "${BOARD_DIR}/loader.conf" >> "${root_mnt}/boot/loader.conf"
 fi
@@ -674,6 +668,12 @@ fi
 # Output example: /dev/md0p3 contains the completed root filesystem
 finalize_root_filesystem()
 {
+	if [ "${INSTALLER}" = "YES" ]; then
+		for required_file in rc.conf.base loader.conf.base; do
+			[ -s "${root_mnt}/usr/local/share/rk3588-installer/${required_file}" ] ||
+			    die "installer payload is missing ${required_file}"
+		done
+	fi
 	# Flush staged files before unmounting or converting the root tree.
 sync
 if [ "${ROOTFS_TYPE}" = "ufs" ]; then
