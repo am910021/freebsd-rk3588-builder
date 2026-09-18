@@ -559,3 +559,59 @@ After changing U-Boot, rkbin, any DTB, or the FreeBSD kernel, verify at least:
 4. The FreeBSD loader menu is visible on both HDMI and UART.
 5. FreeBSD mounts the UFS root, or `zfs:nanopc_t6/ROOT/default`.
 6. `if_rge.ko` loads and networking works.
+
+## U-Boot firmware install, disable, and enable commands
+
+`rkspi install` is available in the U-Boot source, but not yet in a
+released image. Run it at the **U-Boot CLI**, not in a FreeBSD shell. The
+`<interface> <device:partition>` pair identifies the **source file**; the
+destination is always the board's SPI NOR. Check the source partition with
+`ls` first (initialize USB with `usb start` if needed):
+
+```text
+=> ls mmc 0:2 /
+=> rkspi install mmc 0:2 /nanopc-t6-lts-uboot-16m-spi.bin
+=> rkspi install mmc 0:2 /firmware-update-spi.bin
+=> usb start
+=> ls usb 0:2 /
+=> rkspi install usb 0:2 /firmware-update-spi.bin
+```
+
+The complete `*-uboot-16m-spi.bin` image resets the SPI environment; the
+shorter `firmware-update-spi.bin` installs U-Boot while preserving it. The
+command identifies the mode by validated file length, not filename. It checks
+the board, SPI target/layout, image size against actual flash capacity, asks
+for the literal confirmation `INSTALL SPI`, then reads the written bytes back.
+It does not create an automatic update request or reboot. 16M-to-32M migration
+is **not** an install operation; use the existing SPI update/upgrade path.
+
+The same U-Boot source provides the `rkboot` command for SPI, eMMC,
+and SD. `disable` operates only on the U-Boot currently running; `enable`
+names the other boot medium. `mmc 0`/`mmc 1` are **U-Boot** device numbers; confirm them with
+`mmc list`, not FreeBSD's `/dev/mmcsd*` numbering:
+
+```text
+=> rkboot disable
+=> rkboot enable spi
+=> rkboot enable mmc 0
+```
+
+`disable` changes only the four-byte `RKNS` BootROM signature at offset
+`0x8000` of the running firmware. It requires another matching, apparently
+bootable SPI/eMMC/SD image, asks for `DISABLE BOOT`, and verifies read-back.
+`enable` requires the selected firmware to have a zeroed signature, a matching
+board/media/layout marker and valid FIT, and a different currently running
+U-Boot with a valid signature. It writes only the built-in four-byte `RKNS`
+signature, asks for `ENABLE BOOT`, and verifies read-back. For
+SPI, enabling preserves the rest of its 4 KiB erase sector while erasing and
+rewriting that sector. Neither command reboots automatically or replaces the
+rest of the target firmware. Use `rkspi install` if the target firmware is
+missing or corrupted, not `rkboot enable`.
+
+Checking an alternate image cannot guarantee BootROM fallback. SPI install
+and self-disable with eMMC fallback passed on NanoPC-T6-LTS; SPI re-enable
+remains untested. Do **not** try SPI disable on G98 without a proven alternate
+boot source (its eMMC is unpopulated). NanoPC eMMC self-disable, SD fallback,
+and re-enable also passed U-Boot CLI testing on 2026-09-17. The commands,
+fallback evidence, and backups are recorded in
+`feature/rk3588-uboot-manual-spi-install-and-removal.md` in the project log.

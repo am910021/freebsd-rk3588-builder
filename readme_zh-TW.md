@@ -531,3 +531,53 @@ sync
 4. FreeBSD loader menu 可由 HDMI 與 UART 顯示。
 5. FreeBSD 能掛載 UFS root，或 `zfs:nanopc_t6/ROOT/default`。
 6. `if_rge.ko` 載入且網路可用。
+
+## U-Boot 韌體安裝、停用與啟用指令
+
+`rkspi install` 已納入 U-Boot 原始碼，尚未進入發佈 image。指令要在
+**U-Boot CLI** 執行，不是在 FreeBSD shell。`<介面> <裝置:分割區>` 指的是
+**映像檔來源**，寫入目標固定為板上的 SPI NOR。先用 `ls` 確認來源分割區；
+USB 來源可先執行 `usb start`：
+
+```text
+=> ls mmc 0:2 /
+=> rkspi install mmc 0:2 /nanopc-t6-lts-uboot-16m-spi.bin
+=> rkspi install mmc 0:2 /firmware-update-spi.bin
+=> usb start
+=> ls usb 0:2 /
+=> rkspi install usb 0:2 /firmware-update-spi.bin
+```
+
+完整的 `*-uboot-16m-spi.bin` 會重設 SPI environment；較短的
+`firmware-update-spi.bin` 會保留 environment。指令依驗證過的檔案長度
+判斷模式，不依檔名；寫入前檢查板型、SPI 目標／版型，以及映像長度不得
+超過實際 SPI 容量，再要求輸入 `INSTALL SPI`。寫入後會回讀比對，不會
+建立自動更新 request，也不會自動重開。16M→32M 版型升級不屬於
+`install`，應走現有的 SPI update／upgrade 流程。
+
+同一份 U-Boot 原始碼也提供 `rkboot` 指令，適用 SPI、eMMC 與 SD。`disable` 只作用
+於目前執行中的 U-Boot；`enable` 才指定另一個開機媒體。
+`mmc 0`／`mmc 1` 是 **U-Boot** 的裝置編號；先用 `mmc list` 確認，
+不要直接套用 FreeBSD 的 `/dev/mmcsd*` 編號：
+
+```text
+=> rkboot disable
+=> rkboot enable spi
+=> rkboot enable mmc 0
+```
+
+`disable` 只把目前執行中的韌體在 `0x8000` 的四位元組 `RKNS` BootROM 識別碼清為
+零；必須先找到另一份板型相符、表面可開機的 SPI／eMMC／SD 韌體，並輸入
+`DISABLE BOOT` 確認，最後回讀比對。`enable` 要求目標識別碼為零、板型／
+媒體／容量標記相符、FIT 有效，且目前運作的另一份 U-Boot 有有效識別碼；
+只寫入程式內建的四位元組 `RKNS` 識別碼，輸入 `ENABLE BOOT` 後回讀比對。
+SPI 啟用時，會保留 4 KiB erase sector 其餘內容，擦除後整個 sector 寫回。
+兩個指令都不自動重開，也不替換目標的其餘韌體。如果目標韌體不存在或
+已損毀，應使用 `rkspi install`，不能靠 `rkboot enable` 修復。
+
+檢查備援映像仍不能保證 BootROM 一定會回退。NanoPC-T6-LTS 的 SPI 安裝、
+自行停用及回退 eMMC 已通過實機驗證；**SPI 重新啟用尚未驗證**。G98 沒裝
+eMMC，在沒有已驗證的備援開機來源前不可停用 SPI。NanoPC 的 eMMC
+自行停用、SD 回退、重新啟用也已於 2026-09-17 使用 U-Boot CLI 通過驗證；
+指令、回退證據與備份資訊記錄於工作目錄的
+`feature/rk3588-uboot-manual-spi-install-and-removal.md`。
