@@ -329,8 +329,8 @@ if [ "${INSTALLER}" = "YES" ]; then
 fi
 [ ! -e "${OUT}" ] || die "output already exists: ${OUT}"
 
-for cmd in awk mdconfig gpart newfs newfs_msdos mount umount tar chflags \
-    truncate dd mktemp sha256 python3 fsck_msdosfs fsck_ufs pkg stat df; do
+for cmd in awk cmp mdconfig gpart newfs newfs_msdos mount umount tar chflags \
+    truncate dd mktemp sha256 fsck_msdosfs fsck_ufs pkg stat df; do
 	command -v "${cmd}" >/dev/null 2>&1 || die "missing command: ${cmd}"
 done
 if [ "${ROOTFS_TYPE}" = "zfs" ] || [ "${INSTALLER}" = "YES" ]; then
@@ -774,19 +774,18 @@ else
 	zdb -l "/dev/${md}p${ROOT_PARTITION}" >/dev/null
 fi
 
-python3 - "${OUT}" "${UBOOT_BIN}" <<'PY'
-from pathlib import Path
-import sys
-
-image, firmware = map(Path, sys.argv[1:])
-offset = 0x40 * 512
-expected = firmware.read_bytes()[offset:]
-with image.open("rb") as stream:
-    stream.seek(offset)
-    actual = stream.read(len(expected))
-if actual != expected:
-    raise SystemExit(f"raw firmware verification failed at offset {offset}")
-PY
+firmware_bytes=$(stat -f %z "${UBOOT_BIN}")
+firmware_offset=$((64 * 512))
+compare_bytes=$((firmware_bytes - firmware_offset))
+[ "${compare_bytes}" -gt 0 ] && [ $((compare_bytes % 512)) -eq 0 ] ||
+    die "firmware comparison range is not sector-aligned"
+expected_firmware=${WORK}/verify-firmware.expected
+actual_firmware=${WORK}/verify-firmware.actual
+dd if="${UBOOT_BIN}" of="${expected_firmware}" bs=512 skip=64 status=none
+dd if="${OUT}" of="${actual_firmware}" bs=512 skip=64 \
+    count=$((compare_bytes / 512)) status=none
+cmp -s "${expected_firmware}" "${actual_firmware}" ||
+    die "raw firmware verification failed at offset ${firmware_offset}"
 }
 
 # Input: verified OUT plus image/component hashes, layout and provenance globals.
