@@ -439,6 +439,11 @@ ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
 if [ -n "${installer_pkg}" ]; then
 	ASSUME_ALWAYS_YES=yes pkg -r "${root_mnt}" -o REPO_AUTOUPDATE=false \
 	    add "${installer_pkg}"
+	if [ "${INSTALLER}" = "YES" ]; then
+		cp -p "${root_mnt}/usr/local/share/rk3588-installer/rc.local.live" \
+		    "${root_mnt}/etc/rc.local"
+		chmod 755 "${root_mnt}/etc/rc.local"
+	fi
 fi
 if [ -d "${BOARD_FILES_DIR}" ]; then
 	(cd "${BOARD_FILES_DIR}" && tar -cpf - .) |
@@ -670,7 +675,7 @@ fi
 finalize_root_filesystem()
 {
 	if [ "${INSTALLER}" = "YES" ]; then
-		for required_file in rc.conf.base loader.conf.base; do
+		for required_file in rc.conf.base loader.conf.base rc.local.live; do
 			[ -s "${root_mnt}/usr/local/share/rk3588-installer/${required_file}" ] ||
 			    die "installer payload is missing ${required_file}"
 		done
