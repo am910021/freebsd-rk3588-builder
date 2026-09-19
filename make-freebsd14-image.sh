@@ -25,6 +25,7 @@ LOGO_BMP=${LOGO_BMP:-${IMAGE_LOGO_BMP}}
 ROOTFS_TYPE=${ROOTFS_TYPE:-ufs}
 INSTALLER=${INSTALLER:-NO}
 INSTALL_TARGET_ROOT_LABEL=${ROOT_LABEL}
+INSTALL_TARGET_ZFS_POOL_NAME=${ZFS_POOL_NAME}
 INSTALL_TARGET_ESP_MIB=${ESP_SIZE_MIB}
 ROOTFS_SUFFIX=
 if [ "${ROOTFS_TYPE}" = "zfs" ]; then
@@ -32,15 +33,13 @@ if [ "${ROOTFS_TYPE}" = "zfs" ]; then
 fi
 case "${INSTALLER}" in
 YES)
-	[ "${ROOTFS_TYPE}" = "ufs" ] ||
-	    {
-		echo "${0##*/}: installer image must use a UFS live root" >&2
-		exit 1
-	    }
 	SWAP_SIZE_MIB=0
 	ESP_SIZE_MIB=${INSTALLER_ESP_SIZE_MIB}
 	IMAGE_TAIL_MIB=1
 	ROOT_LABEL=${ROOT_LABEL}_installer
+	if [ "${ROOTFS_TYPE}" = "zfs" ]; then
+		ZFS_POOL_NAME=${INSTALLER_ZFS_POOL_NAME}
+	fi
 	ROOTFS_SUFFIX=${ROOTFS_SUFFIX}-installer
 	;;
 NO) ;;
@@ -489,7 +488,7 @@ FIRMWARE_MIB=${FIRMWARE_MIB}
 FIRMWARE_UPDATE_BYTES=${firmware_update_bytes}
 ESP_MIB=${INSTALL_TARGET_ESP_MIB}
 ROOT_LABEL=${INSTALL_TARGET_ROOT_LABEL}
-ZFS_POOL_NAME=${ZFS_POOL_NAME}
+ZFS_POOL_NAME=${INSTALL_TARGET_ZFS_POOL_NAME}
 EOF
 fi
 }
@@ -872,7 +871,7 @@ main()
 	discover_packages
 	validate_inputs_and_tools
 	prepare_workspace
-	if [ "${INSTALLER}" = "YES" ]; then
+	if [ "${INSTALLER}" = "YES" ] && [ "${ROOTFS_TYPE}" = "ufs" ]; then
 		install_root_filesystem
 		stage_installer_payload
 		size_installer_root
