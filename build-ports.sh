@@ -2,6 +2,14 @@
 
 set -eu
 
+BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+BUILDER_LIBRARY=${BUILDER_LIBRARY:-${BUILDER_ROOT}/lib/builder-common.sh}
+[ -r "${BUILDER_LIBRARY}" ] || {
+	echo "${0##*/}: missing library: ${BUILDER_LIBRARY}" >&2
+	exit 1
+}
+. "${BUILDER_LIBRARY}"
+
 # die MESSAGE
 # Input: error text in "$*"; no required global variables.
 # Input example: die "PORT_ORIGINS is empty"
@@ -11,22 +19,6 @@ die()
 {
 	echo "${0##*/}: $*" >&2
 	exit 1
-}
-
-# load_configuration
-# Input: optional BUILDER_ROOT and BUILDER_CONFIG environment variables.
-# Input example: BOARD=g98 BUILDER_CONFIG=/root/freebsd-rk3588-builder/builder.conf
-# Output: loads builder.conf and the selected board configuration into globals.
-# Output example: PORT_ORIGINS="ports-mgmt/pkg net/realtek-rge-kmod ..."
-load_configuration()
-{
-	BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
-	BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
-	[ -r "${BUILDER_CONFIG}" ] ||
-		die "missing config: ${BUILDER_CONFIG}"
-
-	# Load the shared and board-specific build settings.
-	. "${BUILDER_CONFIG}"
 }
 
 # validate_environment
@@ -294,7 +286,7 @@ fetch_runtime_package()
 # Output example: /root/freebsd-rk3588-builder/work/txz/14.3-p16/*.pkg
 main()
 {
-	load_configuration
+	builder_load_configuration
 	validate_environment
 	prepare_workspace
 	build_configured_ports

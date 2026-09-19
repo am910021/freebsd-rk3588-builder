@@ -1,19 +1,21 @@
 #!/bin/sh
 set -eu
 
+BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+BUILDER_LIBRARY=${BUILDER_LIBRARY:-${BUILDER_ROOT}/lib/builder-common.sh}
+[ -r "${BUILDER_LIBRARY}" ] || {
+	echo "${0##*/}: missing library: ${BUILDER_LIBRARY}" >&2
+	exit 1
+}
+. "${BUILDER_LIBRARY}"
+
 # Input: optional BUILDER_ROOT and BUILDER_CONFIG environment variables.
 # Input example: BOARD=g98 BUILDER_CONFIG=/root/freebsd-rk3588-builder/builder.conf
 # Output: loads builder.conf and board.conf, then initializes image-build globals.
 # Output example: ROOTFS_TYPE=ufs and OUT=output/14.3-p16/g98-...img
-load_configuration()
+load_image_configuration()
 {
-	BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
-	BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
-[ -r "${BUILDER_CONFIG}" ] || {
-	echo "${0##*/}: missing config: ${BUILDER_CONFIG}" >&2
-	exit 1
-}
-. "${BUILDER_CONFIG}"
+	builder_load_configuration
 
 [ -n "${BOARD}" ] || {
 	echo "${0##*/}: BOARD is required" >&2
@@ -865,7 +867,7 @@ ls -lh "${OUT}" "${OUT}.sha256" "${OUT}.build-info.txt"
 # Output example: output/14.3-p16/g98-freebsd14.3-p16-installer-...img
 main()
 {
-	load_configuration
+	load_image_configuration
 	parse_arguments "$@"
 	configure_image_layout
 	discover_packages

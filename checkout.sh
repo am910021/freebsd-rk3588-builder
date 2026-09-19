@@ -3,12 +3,13 @@
 set -eu
 
 BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
-BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
-[ -r "${BUILDER_CONFIG}" ] || {
-	echo "${0##*/}: missing config: ${BUILDER_CONFIG}" >&2
+BUILDER_LIBRARY=${BUILDER_LIBRARY:-${BUILDER_ROOT}/lib/builder-common.sh}
+[ -r "${BUILDER_LIBRARY}" ] || {
+	echo "${0##*/}: missing library: ${BUILDER_LIBRARY}" >&2
 	exit 1
 }
-. "${BUILDER_CONFIG}"
+. "${BUILDER_LIBRARY}"
+builder_load_configuration
 
 check_repo()
 {

@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+BUILDER_LIBRARY=${BUILDER_LIBRARY:-${BUILDER_ROOT}/lib/builder-common.sh}
+[ -r "${BUILDER_LIBRARY}" ] || {
+	echo "${0##*/}: missing library: ${BUILDER_LIBRARY}" >&2
+	exit 1
+}
+. "${BUILDER_LIBRARY}"
+
 # fail MESSAGE
 # Input: error text in "$*"; no required global variables.
 # Input example: fail "BOARD is required"
@@ -10,22 +18,6 @@ fail()
 {
 	echo "${0##*/}: $*" >&2
 	exit 1
-}
-
-# load_configuration
-# Input: optional BUILDER_ROOT and BUILDER_CONFIG environment variables.
-# Input example: BOARD=g98 BUILDER_CONFIG=/root/freebsd-rk3588-builder/builder.conf
-# Output: loads builder.conf and the selected board configuration into globals.
-# Output example: UBOOT_DEFCONFIG=g98-rk3588_defconfig
-load_configuration()
-{
-	BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
-	BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
-	[ -r "${BUILDER_CONFIG}" ] ||
-		fail "missing config: ${BUILDER_CONFIG}"
-
-	# Load shared and board-specific U-Boot settings.
-	. "${BUILDER_CONFIG}"
 }
 
 # validate_invocation
@@ -599,7 +591,7 @@ report_outputs()
 # Output example: output/14.3-p16/uboot-2026.07/16m/g98/
 main()
 {
-	load_configuration
+	builder_load_configuration
 	validate_invocation "$@"
 	configure_firmware_layout
 	validate_build_inputs

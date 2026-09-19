@@ -2,6 +2,14 @@
 
 set -eu
 
+BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+BUILDER_LIBRARY=${BUILDER_LIBRARY:-${BUILDER_ROOT}/lib/builder-common.sh}
+[ -r "${BUILDER_LIBRARY}" ] || {
+	echo "${0##*/}: missing library: ${BUILDER_LIBRARY}" >&2
+	exit 1
+}
+. "${BUILDER_LIBRARY}"
+
 # die MESSAGE
 # Input: error text in "$*"; no required global variables.
 # Input example: die "missing FreeBSD source: /root/freebsd-src"
@@ -11,22 +19,6 @@ die()
 {
 	echo "${0##*/}: $*" >&2
 	exit 1
-}
-
-# load_configuration
-# Input: optional BUILDER_ROOT and BUILDER_CONFIG environment variables.
-# Input example: BUILDER_CONFIG=/root/freebsd-rk3588-builder/builder.conf
-# Output: loads builder.conf and its board configuration into global variables.
-# Output example: FREEBSD_KERNCONF=RK3588_G98_NORE
-load_configuration()
-{
-	BUILDER_ROOT=${BUILDER_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
-	BUILDER_CONFIG=${BUILDER_CONFIG:-${BUILDER_ROOT}/builder.conf}
-	[ -r "${BUILDER_CONFIG}" ] ||
-		die "missing config: ${BUILDER_CONFIG}"
-
-	# Load the shared and selected board settings.
-	. "${BUILDER_CONFIG}"
 }
 
 # configure_clean_mode
@@ -188,7 +180,7 @@ report_outputs()
 # Output example: ${TXZ_ROOT}/base.txz and ${TXZ_ROOT}/kernel.txz
 main()
 {
-	load_configuration
+	builder_load_configuration
 	configure_clean_mode
 	validate_environment
 	build_world_and_kernel
