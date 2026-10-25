@@ -45,7 +45,13 @@
 	connector {
 		data-role = "host";
 		power-role = "source";
+		freebsd,displayport-auto;
 	};
+};
+
+&dp0 {
+	status = "okay";
+	freebsd,auto-enable;
 };
 
 &cluster0_opp_table {
